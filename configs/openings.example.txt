@@ -1,0 +1,9 @@
+# One move sequence per line. Paired testing reuses the same opening with
+# candidate and baseline swapping teams.
+#
+# Either form is accepted:
+# moves f4f6 a8g2 g13l8
+# f4f6 a8g2 g13l8
+#
+# A custom FEN4 can also be supplied:
+# fen R-...board... | moves f4f6 a8g2

@@ -1,0 +1,84 @@
+{
+  "engine": {
+    "path": "C:/path/to/IronPhoenix/out/build/x64-release/ironphoenix.exe",
+    "startup_timeout": 10,
+    "move_timeout": 60,
+    "strict_options": true,
+    "common_options": {
+      "Hash": 64,
+      "MultiPV": 1,
+      "UseNNUE": false
+    }
+  },
+  "search": {
+    "mode": "movetime",
+    "value": 100
+  },
+  "match": {
+    "games": 100,
+    "workers": 4,
+    "max_plies": 320,
+    "paired": true,
+    "seed": 20261009,
+    "openings_file": null,
+    "results_file": "results/games.jsonl"
+  },
+  "baseline": {
+    "name": "IronPhoenix baseline",
+    "options": {
+      "SearchSEEPruneMargin": 80,
+      "SearchLMRBaseX100": 75,
+      "SearchLMRDivisorX100": 275
+    }
+  },
+  "candidate": {
+    "name": "IronPhoenix candidate",
+    "options": {
+      "SearchSEEPruneMargin": 90,
+      "SearchLMRBaseX100": 75,
+      "SearchLMRDivisorX100": 275
+    }
+  },
+  "sprt": {
+    "elo0": 0,
+    "elo1": 5,
+    "alpha": 0.05,
+    "beta": 0.05,
+    "max_games": 10000,
+    "batch_games": 20
+  },
+  "spsa": {
+    "iterations": 100,
+    "games_per_iteration": 20,
+    "a": 8.0,
+    "c": 4.0,
+    "alpha": 0.602,
+    "gamma": 0.101,
+    "A": 10.0,
+    "seed": 20261009,
+    "state_file": "results/spsa_state.json",
+    "parameters": [
+      {
+        "name": "SearchSEEPruneMargin",
+        "value": 80,
+        "min": 20,
+        "max": 200,
+        "step": 5
+      },
+      {
+        "name": "SearchLMRBaseX100",
+        "value": 75,
+        "min": 25,
+        "max": 150,
+        "step": 5
+      },
+      {
+        "name": "SearchLMRDivisorX100",
+        "value": 275,
+        "min": 150,
+        "max": 450,
+        "step": 5
+      }
+    ]
+  }
+}
