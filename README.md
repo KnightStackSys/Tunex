@@ -1,10 +1,12 @@
-# Tunex
+# ⚙️ Tunex
+
+♟️ **UCI tuning and strength testing for IronPhoenix 4-player chess.**
 
 **Tunex** is a lightweight Python tuning and strength-testing harness built for [IronPhoenix](https://github.com/KnightStackSys/IronPhoenix), a 4-player chess Teams engine.
 
 It keeps chess computation inside the C++ engine and uses Python for the parts that benefit from rapid iteration: launching engine processes, applying UCI parameters, paired match testing, Elo statistics, SPRT, SPSA, experiment logs, and resumable tuning state.
 
-## What it supports
+## ✨ What it supports
 
 - **UCI runtime parameters** — change IronPhoenix search/HCE values without recompiling.
 - **4PC Teams match runner** — candidate plays Red+Yellow in one game and Blue+Green in the paired game.
@@ -19,7 +21,7 @@ It keeps chess computation inside the C++ engine and uses Python for the parts t
 
 Tunex currently targets IronPhoenix's 4PC UCI behavior, including its immediate king-capture terminal score (`mate 1`).
 
-## Requirements
+## 📋 Requirements
 
 - Python **3.11+**
 - A built IronPhoenix executable
@@ -27,7 +29,7 @@ Tunex currently targets IronPhoenix's 4PC UCI behavior, including its immediate 
 
 Tunex itself has no third-party runtime dependencies.
 
-## Install
+## 🛠️ Install
 
 From the Tunex repository:
 
@@ -41,7 +43,7 @@ Then:
 tunex --help
 ```
 
-## Configure IronPhoenix
+## ⚙️ Configure IronPhoenix
 
 Copy `configs/ironphoenix.example.json` to `configs/ironphoenix.json` and change `engine.path` to your executable.
 
@@ -69,7 +71,7 @@ Recommended common options for search-parameter tuning are:
 
 Keeping NNUE off is useful when tuning HCE or search behavior against a stable HCE baseline. Turn it on deliberately when you want NNUE-backed search tests.
 
-## Verify the engine/options
+## 🔎 Verify the engine/options
 
 ```bash
 tunex -c configs/ironphoenix.json probe
@@ -79,7 +81,7 @@ Tunex performs a UCI handshake, validates configured option names, applies the o
 
 If a configured tuning option is not advertised, Tunex fails early instead of silently running a useless match.
 
-## Run a fixed match
+## ♟️ Run a fixed match
 
 ```bash
 tunex -c configs/ironphoenix.json match
@@ -95,7 +97,7 @@ With paired testing, game 1 assigns the candidate to **Red+Yellow** and game 2 a
 
 Every completed game is appended to the configured JSONL result file.
 
-## Openings
+## 📖 Openings
 
 Set:
 
@@ -123,7 +125,7 @@ fen <FEN4> | moves f4f6 a8g2
 
 Paired games always reuse the same opening before swapping the candidate's team.
 
-## SPRT
+## 📈 SPRT
 
 Use SPRT for questions such as: *Does this LMP change gain at least a small amount of Elo?*
 
@@ -148,11 +150,11 @@ tunex -c configs/ironphoenix.json sprt
 
 Tunex reports cumulative W/D/L, Elo estimate, LLR, boundaries, and current decision after every batch.
 
-### SPRT model note
+### 📊 SPRT model note
 
 The first Tunex release uses a **logistic-score SPRT**. Draws count as half a win and half a loss. This is intentionally simple and useful for development, but it is not a pentanomial paired-game SPRT. The raw W/D/L and Elo output are always shown so you can inspect the actual result.
 
-## SPSA
+## 🎯 SPSA
 
 SPSA is useful for tuning several search constants simultaneously.
 
@@ -193,13 +195,23 @@ State is written after every iteration. Restarting the same command resumes from
 
 SPSA creates a `+` and `-` parameter vector each iteration, runs them directly against one another in paired games, estimates a gradient, and moves the center parameter vector.
 
-## Parallelism
+## 🚀 Parallelism
 
 `match.workers` controls simultaneous games. Each game uses **two IronPhoenix processes**, so `workers = 4` can use up to eight engine processes at once.
 
 Start conservatively. For stable Elo testing, avoiding CPU oversubscription is more important than maximizing raw throughput.
 
-## Result termination
+## 🛑 Stopping a run (Ctrl+C)
+
+Press **Ctrl+C** once in the terminal to interrupt a match, SPRT, or SPSA run. Tunex cancels games that have not started, signals active workers to stop, and closes their IronPhoenix subprocesses and redirected streams.
+
+- **SPSA:** Each completed iteration is saved to `spsa.state_file`. Interruptions midway through an iteration do not commit a partial parameter update; rerun with the same configuration to resume from the last completed iteration.
+- **Match/SPRT:** Finished game records in the JSONL results file remain on disk. Starting a new match or SPRT command does not resume the previous aggregate statistics.
+- **Exit code:** Ctrl+C exits with code `130` rather than showing a Python traceback.
+
+If IronPhoenix ignores `stop` / `quit`, Tunex force-terminates the subprocess rather than waiting indefinitely.
+
+## 🏁 Result termination
 
 Tunex currently ends a game when:
 
@@ -209,7 +221,7 @@ Tunex currently ends a game when:
 
 If IronPhoenix exits, hangs, or violates the expected protocol, the experiment fails rather than silently counting a bogus result.
 
-## Suggested IronPhoenix workflow
+## 🧪 Suggested IronPhoenix workflow
 
 For isolated feature tests:
 
@@ -232,6 +244,6 @@ For search tuning:
 
 For HCE tuning, Tunex can already tune the exposed material and mobility UCI weights by games. A future offline/Texel mode can add much faster position-loss optimization without changing the match/SPSA layer.
 
-## License
+## 📜 License
 
 GPL-3.0-or-later. See `LICENSE`.
