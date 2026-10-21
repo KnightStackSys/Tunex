@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass
 import queue
 import re
@@ -38,12 +39,14 @@ class UciEngine:
         startup_timeout: float = 10.0,
         move_timeout: float = 60.0,
         strict_options: bool = True,
+        cancel_event: threading.Event | None = None,
     ) -> None:
         self.path = path
         self.name = name
         self.startup_timeout = startup_timeout
         self.move_timeout = move_timeout
         self.strict_options = strict_options
+        self.cancel_event = cancel_event
         self.process: subprocess.Popen[str] | None = None
         self._queue: queue.Queue[str | None] = queue.Queue()
         self._reader: threading.Thread | None = None
@@ -73,20 +76,30 @@ class UciEngine:
         except OSError as exc:
             raise EngineError(f"unable to start {self.name}: {exc}") from exc
 
-        self._reader = threading.Thread(target=self._reader_loop, daemon=True)
-        self._reader.start()
-        self.send("uci")
-        lines = self._read_until(lambda line: line == "uciok", self.startup_timeout)
-        for line in lines:
-            match = _OPTION_RE.match(line)
-            if match:
-                self.options.add(match.group(1))
-
-    def _reader_loop(self) -> None:
-        assert self.process is not None and self.process.stdout is not None
         try:
-            for raw in self.process.stdout:
+            assert self.process.stdout is not None
+            self._reader = threading.Thread(
+                target=self._reader_loop, args=(self.process.stdout,), daemon=True
+            )
+            self._reader.start()
+            self.send("uci")
+            lines = self._read_until(lambda line: line == "uciok", self.startup_timeout)
+            for line in lines:
+                match = _OPTION_RE.match(line)
+                if match:
+                    self.options.add(match.group(1))
+        except BaseException:
+            # Failed startup must never orphan a subprocess or its pipes.
+            self.close()
+            raise
+
+    def _reader_loop(self, stdout) -> None:
+        try:
+            for raw in stdout:
                 self._queue.put(raw.rstrip("\r\n"))
+        except (OSError, ValueError):
+            # Pipe may be invalidated by Windows during forced shutdown.
+            pass
         finally:
             self._queue.put(None)
 
@@ -107,14 +120,23 @@ class UciEngine:
             raise EngineError(f"failed to write to {self.name}: {exc}") from exc
 
     def _read_line(self, timeout: float) -> str:
-        try:
-            line = self._queue.get(timeout=max(timeout, 0.001))
-        except queue.Empty as exc:
-            raise EngineError(f"timeout waiting for {self.name}") from exc
-        if line is None:
-            self._check_running()
-            raise EngineError(f"{self.name} closed its output")
-        return line
+        deadline = time.monotonic() + max(timeout, 0.001)
+        while True:
+            if self.cancel_event is not None and self.cancel_event.is_set():
+                raise EngineError(f"{self.name} interrupted")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise EngineError(f"timeout waiting for {self.name}")
+            try:
+                # Poll during searches so interrupted workers exit promptly.
+                interval = min(remaining, 0.1) if self.cancel_event is not None else remaining
+                line = self._queue.get(timeout=interval)
+            except queue.Empty:
+                continue
+            if line is None:
+                self._check_running()
+                raise EngineError(f"{self.name} closed its output")
+            return line
 
     def _read_until(self, predicate, timeout: float) -> list[str]:
         deadline = time.monotonic() + timeout
@@ -225,14 +247,33 @@ class UciEngine:
         proc = self.process
         if proc is None:
             return
-        if proc.poll() is None:
-            try:
-                self.send("quit")
-            except EngineError:
-                pass
-            try:
-                proc.wait(timeout=2.0)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=2.0)
         self.process = None
+        try:
+            if proc.poll() is None:
+                if self.cancel_event is not None and self.cancel_event.is_set():
+                    # Ctrl+C should not wait for an engine's long search.
+                    with suppress(OSError, ValueError):
+                        proc.kill()
+                else:
+                    if proc.stdin is not None:
+                        with suppress(OSError, ValueError):
+                            proc.stdin.write("stop\nquit\n")
+                            proc.stdin.flush()
+                    try:
+                        proc.wait(timeout=1.0)
+                    except (subprocess.TimeoutExpired, OSError):
+                        with suppress(OSError, ValueError):
+                            proc.kill()
+            with suppress(subprocess.TimeoutExpired, OSError):
+                proc.wait(timeout=2.0)
+        finally:
+            if self._reader is not None:
+                if self._reader.ident is not None:
+                    self._reader.join(timeout=1.0)
+                self._reader = None
+            # Explicitly close all redirected handles before Python finalizes
+            # TextIOWrapper, which can raise OSError(22) on Windows.
+            for stream in (proc.stdin, proc.stdout, proc.stderr):
+                if stream is not None:
+                    with suppress(OSError, ValueError):
+                        stream.close()
