@@ -137,6 +137,9 @@ def main(argv: list[str] | None = None) -> int:
             return command_sprt(config)
         if args.command == "spsa":
             return command_spsa(config, args.iterations)
+    except KeyboardInterrupt:
+        print("\nTunex interrupted; active engine processes stopped.", file=sys.stderr)
+        return 130
     except (EngineError, OSError, ValueError) as exc:
         print(f"tunex error: {exc}", file=sys.stderr)
         return 1
