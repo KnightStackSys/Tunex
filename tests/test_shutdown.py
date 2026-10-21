@@ -49,7 +49,7 @@ class UciEngineShutdownTests(unittest.TestCase):
 
         engine.close()
 
-        proc.stdin.write.assert_called_once_with("stop\\nquit\\n")
+        proc.stdin.write.assert_called_once_with("stop\nquit\n")
         proc.kill.assert_called_once()
         proc.stdin.close.assert_called_once()
         proc.stdout.close.assert_called_once()
