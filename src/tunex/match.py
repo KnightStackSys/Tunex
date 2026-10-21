@@ -107,7 +107,12 @@ def _merged_options(common: dict[str, Any], variant: VariantConfig) -> dict[str,
     return merged
 
 
-def _play_game(config: Config, spec: GameSpec, baseline: VariantConfig, candidate: VariantConfig) -> GameRecord:
+def _play_game(
+    config: Config, spec: GameSpec, baseline: VariantConfig, candidate: VariantConfig,
+    cancel_event: threading.Event | None = None,
+) -> GameRecord:
+    if cancel_event is not None and cancel_event.is_set():
+        raise EngineError("match interrupted")
     candidate_options = _merged_options(config.engine.common_options, candidate)
     baseline_options = _merged_options(config.engine.common_options, baseline)
 
@@ -118,6 +123,7 @@ def _play_game(config: Config, spec: GameSpec, baseline: VariantConfig, candidat
             startup_timeout=config.engine.startup_timeout,
             move_timeout=config.engine.move_timeout,
             strict_options=config.engine.strict_options,
+            cancel_event=cancel_event,
         ),
         1 - spec.candidate_team: UciEngine(
             config.engine.path,
@@ -125,6 +131,7 @@ def _play_game(config: Config, spec: GameSpec, baseline: VariantConfig, candidat
             startup_timeout=config.engine.startup_timeout,
             move_timeout=config.engine.move_timeout,
             strict_options=config.engine.strict_options,
+            cancel_event=cancel_event,
         ),
     }
 
@@ -141,6 +148,8 @@ def _play_game(config: Config, spec: GameSpec, baseline: VariantConfig, candidat
 
         initial_side = _start_side(spec.start_fen)
         for _ in range(config.match.max_plies):
+            if cancel_event is not None and cancel_event.is_set():
+                raise EngineError("match interrupted")
             side = (initial_side + len(moves)) % 4
             team = side & 1
             engine = engines[team]
@@ -213,6 +222,7 @@ class MatchRunner:
     def __init__(self, config: Config) -> None:
         self.config = config
         self.openings = _load_openings(config.match.openings_file)
+        self.cancel_event = threading.Event()
 
     def _specs(self, games: int, offset: int = 0) -> list[GameSpec]:
         if self.config.match.paired and games % 2:
@@ -243,6 +253,7 @@ class MatchRunner:
         offset: int = 0,
         write_results: bool = True,
     ) -> tuple[WDL, list[GameRecord]]:
+        self.cancel_event.clear()
         baseline = baseline or self.config.baseline
         candidate = candidate or self.config.candidate
         games = games if games is not None else self.config.match.games
@@ -258,20 +269,39 @@ class MatchRunner:
                 writer.write(record)
 
         if self.config.match.workers == 1:
-            for spec in specs:
-                completed(_play_game(self.config, spec, baseline, candidate))
+            try:
+                for spec in specs:
+                    completed(_play_game(
+                        self.config, spec, baseline, candidate, self.cancel_event
+                    ))
+            except BaseException:
+                self.cancel_event.set()
+                raise
         else:
             with ThreadPoolExecutor(max_workers=self.config.match.workers) as pool:
-                futures = {
-                    pool.submit(_play_game, self.config, spec, baseline, candidate): spec
-                    for spec in specs
-                }
-                for future in as_completed(futures):
-                    spec = futures[future]
-                    try:
-                        completed(future.result())
-                    except EngineError as exc:
-                        raise EngineError(f"game {spec.game_id} failed: {exc}") from exc
+                futures = {}
+                try:
+                    futures = {
+                        pool.submit(
+                            _play_game, self.config, spec, baseline, candidate,
+                            self.cancel_event,
+                        ): spec
+                        for spec in specs
+                    }
+                    for future in as_completed(futures):
+                        spec = futures[future]
+                        try:
+                            completed(future.result())
+                        except EngineError as exc:
+                            raise EngineError(f"game {spec.game_id} failed: {exc}") from exc
+                except BaseException:
+                    # Set cancellation before the executor waits for its workers.
+                    # Unstarted games are dropped; running UCI reads wake up
+                    # promptly and each worker closes its own engines.
+                    self.cancel_event.set()
+                    for future in futures:
+                        future.cancel()
+                    raise
 
         records.sort(key=lambda r: r.game_id)
         return wdl, records
