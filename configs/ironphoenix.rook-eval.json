@@ -1,0 +1,156 @@
+{
+  "engine": {
+    "path": "C:/path/to/IronPhoenix/out/build/x64-release/ironphoenix.exe",
+    "startup_timeout": 10,
+    "move_timeout": 60,
+    "strict_options": true,
+    "common_options": {
+      "Hash": 128,
+      "MultiPV": 1,
+      "UseNNUE": false
+    }
+  },
+  "search": {
+    "mode": "movetime",
+    "value": 100
+  },
+  "match": {
+    "games": 200,
+    "workers": 4,
+    "max_plies": 320,
+    "paired": true,
+    "seed": 20261024,
+    "openings_file": null,
+    "results_file": "results/rook-eval-games.jsonl"
+  },
+  "baseline": {
+    "name": "IronPhoenix rook heuristics OFF",
+    "options": {
+      "EvalRookPawnlessBonus": 0,
+      "EvalRookOpenFileBonus": 0,
+      "EvalRookSemiOpenFileBonus": 0,
+      "EvalRookSeventhRankBonus": 0,
+      "EvalRookEighthRankBonus": 0,
+      "EvalRookBehindFriendlyPasserBonus": 0,
+      "EvalRookBehindEnemyPasserBonus": 0,
+      "EvalRookUncastledKingBlockPenalty": 0,
+      "EvalRookQueenFileBonus": 0,
+      "EvalRookConnectedBonus": 0,
+      "EvalRookSupportedSeventhBonus": 0
+    }
+  },
+  "candidate": {
+    "name": "IronPhoenix rook heuristics ON (initial)",
+    "options": {
+      "EvalRookPawnlessBonus": 12,
+      "EvalRookOpenFileBonus": 18,
+      "EvalRookSemiOpenFileBonus": 9,
+      "EvalRookSeventhRankBonus": 16,
+      "EvalRookEighthRankBonus": 10,
+      "EvalRookBehindFriendlyPasserBonus": 12,
+      "EvalRookBehindEnemyPasserBonus": 8,
+      "EvalRookUncastledKingBlockPenalty": 12,
+      "EvalRookQueenFileBonus": 6,
+      "EvalRookConnectedBonus": 12,
+      "EvalRookSupportedSeventhBonus": 8
+    }
+  },
+  "sprt": {
+    "elo0": 0,
+    "elo1": 5,
+    "alpha": 0.05,
+    "beta": 0.05,
+    "max_games": 10000,
+    "batch_games": 20
+  },
+  "spsa": {
+    "iterations": 250,
+    "games_per_iteration": 40,
+    "a": 200,
+    "c": 4,
+    "alpha": 0.602,
+    "gamma": 0.101,
+    "A": 20,
+    "seed": 20261024,
+    "state_file": "results/rook-eval-spsa-state.json",
+    "parameters": [
+      {
+        "name": "EvalRookPawnlessBonus",
+        "value": 12,
+        "min": 0,
+        "max": 40,
+        "step": 1
+      },
+      {
+        "name": "EvalRookOpenFileBonus",
+        "value": 18,
+        "min": 0,
+        "max": 60,
+        "step": 1
+      },
+      {
+        "name": "EvalRookSemiOpenFileBonus",
+        "value": 9,
+        "min": 0,
+        "max": 40,
+        "step": 1
+      },
+      {
+        "name": "EvalRookSeventhRankBonus",
+        "value": 16,
+        "min": 0,
+        "max": 60,
+        "step": 1
+      },
+      {
+        "name": "EvalRookEighthRankBonus",
+        "value": 10,
+        "min": 0,
+        "max": 50,
+        "step": 1
+      },
+      {
+        "name": "EvalRookBehindFriendlyPasserBonus",
+        "value": 12,
+        "min": 0,
+        "max": 50,
+        "step": 1
+      },
+      {
+        "name": "EvalRookBehindEnemyPasserBonus",
+        "value": 8,
+        "min": 0,
+        "max": 40,
+        "step": 1
+      },
+      {
+        "name": "EvalRookUncastledKingBlockPenalty",
+        "value": 12,
+        "min": 0,
+        "max": 50,
+        "step": 1
+      },
+      {
+        "name": "EvalRookQueenFileBonus",
+        "value": 6,
+        "min": 0,
+        "max": 30,
+        "step": 1
+      },
+      {
+        "name": "EvalRookConnectedBonus",
+        "value": 12,
+        "min": 0,
+        "max": 60,
+        "step": 1
+      },
+      {
+        "name": "EvalRookSupportedSeventhBonus",
+        "value": 8,
+        "min": 0,
+        "max": 40,
+        "step": 1
+      }
+    ]
+  }
+}
