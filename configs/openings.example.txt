@@ -1,9 +1,28 @@
-# One move sequence per line. Paired testing reuses the same opening with
-# candidate and baseline swapping teams.
+# One opening per line. Paired testing reuses the same opening while
+# candidate and baseline swap Teams (Red+Yellow vs Blue+Green).
 #
-# Either form is accepted:
-# moves f4f6 a8g2 g13l8
-# f4f6 a8g2 g13l8
+# Existing UCI/coordinate notation is still accepted:
+# moves e2e3 b7c7 g13g12 m7l7
+# e2e3 b7c7 g13g12 m7l7
 #
-# A custom FEN4 can also be supplied:
-# fen R-...board... | moves f4f6 a8g2
+# SAN moves are now supported too (4PC Red -> Blue -> Yellow -> Green):
+# san e3 c7 g12 l7
+# e3 c7 g12 l7
+#
+# You may mix SAN and coordinate moves in the same line:
+# moves e2e3 c7 g13g12 l7
+#
+# SAN supports piece letters (Nf3, Bxe5), disambiguation (Nef3),
+# captures (hxi5), castling (O-O / O-O-O), promotion (g11=Q),
+# and optional check / annotation suffixes (+, #, !, ?).
+#
+# 4PC long algebraic notation is supported as well:
+# moves e2-e3 b7-c7 g13-g12 m7-l7
+#
+# A complete custom Chess.com FEN4 can be supplied with either notation:
+# fen R-...board... | moves e2e3 c7
+# fen R-...board... | san e3 c7
+# fen 4PC | san e3 c7
+#
+# SAN is converted to UCI with IronPhoenix's own legal move generator.
+# Invalid or ambiguous SAN fails with the offending move/ply.

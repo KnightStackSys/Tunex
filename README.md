@@ -134,25 +134,39 @@ Set:
 "openings_file": "openings.txt"
 ```
 
-Each non-comment line can be a move sequence:
+Each non-comment line can contain **UCI coordinates**, **SAN**, or a mix
+of both. For example, the following represent the same four opening plies
+in Modern four-player Teams chess (Red, Blue, Yellow, Green):
 
 ```text
-moves f4f6 a8g2 g13l8
+moves e2e3 b7c7 g13g12 m7l7
+san e3 c7 g12 l7
+e3 c7 g12 l7
+moves e2e3 c7 g13g12 l7
 ```
 
-or simply:
+SAN supports ordinary piece moves such as `Nf3`, captures `Bxe5` / `hxi5`,
+source disambiguation (`Nef3`), castling (`O-O` / `O-O-O`), promotions
+(`g11=Q`), and trailing check or annotation symbols. Four-player
+PGN-style long algebraic moves such as `Ne1-f3` are supported too.
+
+You can combine SAN with a custom Chess.com FEN4:
 
 ```text
-f4f6 a8g2 g13l8
+fen <FEN4> | san Nf3 c7
+fen <FEN4> | moves e1f3 c7
+fen 4PC | san e3 c7
 ```
 
-Custom FEN4 positions are supported too:
+Tunex queries IronPhoenix for the **current legal 4PC moves and FEN4**
+to resolve SAN into unique UCI coordinates before gameplay. Invalid,
+ambiguous, or unsupported SAN aborts with the offending opening ply rather
+than guessing. No ordinary 8×8 chess library is used. Conversion happens
+before the game searches and does not send `ucinewgame` between moves.
 
-```text
-fen <FEN4> | moves f4f6 a8g2
-```
-
-Paired games always reuse the same opening before swapping the candidate's team.
+Paired games reuse the **converted UCI opening** when swapping candidate and
+baseline teams. SAN conversion requires an IronPhoenix build supporting the
+`fen` and `moves` commands, as current IronPhoenix does.
 
 <a id="-sprt"></a>
 
