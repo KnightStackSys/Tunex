@@ -51,12 +51,19 @@ class EngineConfig:
 class VariantConfig:
     name: str
     options: dict[str, Any] = field(default_factory=dict)
+    # Optional executable override. Default remains engine.path for existing
+    # SPRT, fixed-match and SPSA configurations.
+    path: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], default_name: str) -> "VariantConfig":
+        path = data.get("path")
+        if path is not None and (not isinstance(path, str) or not path.strip()):
+            raise ValueError(f"{default_name}.path must be a nonempty string")
         return cls(
             name=str(data.get("name", default_name)),
             options=dict(data.get("options", {})),
+            path=path,
         )
 
 
@@ -211,12 +218,17 @@ class Config:
             match.openings_file = str((config_path.parent / openings).resolve())
         if not Path(engine.path).is_absolute():
             engine.path = str((config_path.parent / engine.path).resolve())
+        baseline = VariantConfig.from_dict(data.get("baseline", {}), "baseline")
+        candidate = VariantConfig.from_dict(data.get("candidate", {}), "candidate")
+        for variant in (baseline, candidate):
+            if variant.path is not None and not Path(variant.path).is_absolute():
+                variant.path = str((config_path.parent / variant.path).resolve())
         return cls(
             engine=engine,
             search=SearchConfig.from_dict(data.get("search")),
             match=match,
-            baseline=VariantConfig.from_dict(data.get("baseline", {}), "baseline"),
-            candidate=VariantConfig.from_dict(data.get("candidate", {}), "candidate"),
+            baseline=baseline,
+            candidate=candidate,
             sprt=SprtConfig.from_dict(data.get("sprt")),
             spsa=SpsaConfig.from_dict(data["spsa"]) if "spsa" in data else None,
         )

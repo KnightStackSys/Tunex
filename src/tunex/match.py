@@ -145,7 +145,7 @@ def _play_game(
 
     engines = {
         spec.candidate_team: UciEngine(
-            config.engine.path,
+            candidate.path or config.engine.path,
             name=candidate.name,
             startup_timeout=config.engine.startup_timeout,
             move_timeout=config.engine.move_timeout,
@@ -153,7 +153,7 @@ def _play_game(
             cancel_event=cancel_event,
         ),
         1 - spec.candidate_team: UciEngine(
-            config.engine.path,
+            baseline.path or config.engine.path,
             name=baseline.name,
             startup_timeout=config.engine.startup_timeout,
             move_timeout=config.engine.move_timeout,

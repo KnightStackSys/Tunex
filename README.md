@@ -81,6 +81,55 @@ Recommended common options for search-parameter tuning are:
 
 Keeping NNUE off is useful when tuning HCE or search behavior against a stable HCE baseline. Turn it on deliberately when you want NNUE-backed search tests.
 
+### Compare two different engine executables
+
+For SPRT or a fixed match between **two different .exe builds**, give each
+variant its own `path`. The paths under `baseline` and `candidate`
+override `engine.path`; omit them to retain the older behavior of using one
+executable with different UCI options.
+
+```json
+{
+  "engine": {
+    "path": "C:/Engines/IronPhoenix-old.exe",
+    "common_options": {
+      "Hash": 64,
+      "MultiPV": 1,
+      "UseNNUE": false
+    }
+  },
+  "baseline": {
+    "name": "Before change",
+    "path": "C:/Engines/IronPhoenix-old.exe",
+    "options": {}
+  },
+  "candidate": {
+    "name": "After change",
+    "path": "C:/Engines/IronPhoenix-new.exe",
+    "options": {}
+  }
+}
+```
+
+Keep the other `search`, `match`, and `sprt` sections in the same config
+file. Paths can be absolute (Windows forward slashes are accepted) or relative
+to the config file's directory. `tunex probe` checks the candidate executable.
+
+Recommended run from the Tunex repository root:
+
+```powershell
+python -m pip install -e .
+tunex -c configs/ironphoenix.json probe
+tunex -c configs/ironphoenix.json match --games 20
+tunex -c configs/ironphoenix.json sprt
+```
+
+For a fair binary comparison, compile both executables in Release mode, use
+the same NNUE and hash settings, fixed `search.mode = "movetime"`, and
+`match.paired = true`. Each game uses a fresh candidate and baseline process,
+and Tunex sends `ucinewgame` to both before the game begins.
+
+
 <a id="-verify-the-engineoptions"></a>
 
 ## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/search.svg" alt="" width="20" height="20"> Verify the engine/options

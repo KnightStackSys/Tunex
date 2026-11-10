@@ -23,7 +23,7 @@ def command_probe(config: Config) -> int:
     options = dict(config.engine.common_options)
     options.update(config.candidate.options)
     with UciEngine(
-        config.engine.path,
+        config.candidate.path or config.engine.path,
         name=config.candidate.name,
         startup_timeout=config.engine.startup_timeout,
         move_timeout=config.engine.move_timeout,

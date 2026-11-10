@@ -87,8 +87,11 @@ class SpsaRunner:
                 plus_options[p.name] = _quantize(self.theta[p.name] + ck * delta[p.name], p)
                 minus_options[p.name] = _quantize(self.theta[p.name] - ck * delta[p.name], p)
 
-            plus = VariantConfig(name="SPSA+", options=plus_options)
-            minus = VariantConfig(name="SPSA-", options=minus_options)
+            # SPSA compares parameter vectors of the SAME executable.
+            # A variant-specific baseline path takes precedence when set.
+            tune_path = self.config.baseline.path
+            plus = VariantConfig(name="SPSA+", options=plus_options, path=tune_path)
+            minus = VariantConfig(name="SPSA-", options=minus_options, path=tune_path)
 
             wdl, _ = self.match_runner.run(
                 baseline=minus,
