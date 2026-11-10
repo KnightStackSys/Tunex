@@ -1,12 +1,16 @@
-# ⚙️ Tunex
+<a id="-tunex"></a>
 
-♟️ **UCI tuning and strength testing for IronPhoenix 4-player chess.**
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/settings.svg" alt="" width="20" height="20"> Tunex
+
+<img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/crown.svg" alt="" width="20" height="20"> **UCI tuning and strength testing for IronPhoenix 4-player chess.**
 
 **Tunex** is a lightweight Python tuning and strength-testing harness built for [IronPhoenix](https://github.com/KnightStackSys/IronPhoenix), a 4-player chess Teams engine.
 
 It keeps chess computation inside the C++ engine and uses Python for the parts that benefit from rapid iteration: launching engine processes, applying UCI parameters, paired match testing, Elo statistics, SPRT, SPSA, experiment logs, and resumable tuning state.
 
-## ✨ What it supports
+<a id="-what-it-supports"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/zap.svg" alt="" width="20" height="20"> What it supports
 
 - **UCI runtime parameters** — change IronPhoenix search/HCE values without recompiling.
 - **4PC Teams match runner** — candidate plays Red+Yellow in one game and Blue+Green in the paired game.
@@ -21,7 +25,9 @@ It keeps chess computation inside the C++ engine and uses Python for the parts t
 
 Tunex currently targets IronPhoenix's 4PC UCI behavior, including its immediate king-capture terminal score (`mate 1`).
 
-## 📋 Requirements
+<a id="-requirements"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/clipboard-list.svg" alt="" width="20" height="20"> Requirements
 
 - Python **3.11+**
 - A built IronPhoenix executable
@@ -29,7 +35,9 @@ Tunex currently targets IronPhoenix's 4PC UCI behavior, including its immediate 
 
 Tunex itself has no third-party runtime dependencies.
 
-## 🛠️ Install
+<a id="-install"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/download.svg" alt="" width="20" height="20"> Install
 
 From the Tunex repository:
 
@@ -43,7 +51,9 @@ Then:
 tunex --help
 ```
 
-## ⚙️ Configure IronPhoenix
+<a id="-configure-ironphoenix"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/settings.svg" alt="" width="20" height="20"> Configure IronPhoenix
 
 Copy `configs/ironphoenix.example.json` to `configs/ironphoenix.json` and change `engine.path` to your executable.
 
@@ -71,7 +81,9 @@ Recommended common options for search-parameter tuning are:
 
 Keeping NNUE off is useful when tuning HCE or search behavior against a stable HCE baseline. Turn it on deliberately when you want NNUE-backed search tests.
 
-## 🔎 Verify the engine/options
+<a id="-verify-the-engineoptions"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/search.svg" alt="" width="20" height="20"> Verify the engine/options
 
 ```bash
 tunex -c configs/ironphoenix.json probe
@@ -81,7 +93,9 @@ Tunex performs a UCI handshake, validates configured option names, applies the o
 
 If a configured tuning option is not advertised, Tunex fails early instead of silently running a useless match.
 
-## 🔄 New-game reset and correction histories
+<a id="-new-game-reset-and-correction-histories"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/refresh-cw.svg" alt="" width="20" height="20"> New-game reset and correction histories
 
 Tunex sends `ucinewgame` to **both** IronPhoenix processes after applying
 their UCI options and waits for `readyok` **before every game**, including
@@ -92,7 +106,9 @@ games. The engine processes are also newly created for each game.
 
 This protocol is regression-tested for both serial and parallel match workers.
 
-## ♟️ Run a fixed match
+<a id="-run-a-fixed-match"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/play.svg" alt="" width="20" height="20"> Run a fixed match
 
 ```bash
 tunex -c configs/ironphoenix.json match
@@ -108,7 +124,9 @@ With paired testing, game 1 assigns the candidate to **Red+Yellow** and game 2 a
 
 Every completed game is appended to the configured JSONL result file.
 
-## 📖 Openings
+<a id="-openings"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/book-open.svg" alt="" width="20" height="20"> Openings
 
 Set:
 
@@ -136,7 +154,9 @@ fen <FEN4> | moves f4f6 a8g2
 
 Paired games always reuse the same opening before swapping the candidate's team.
 
-## 📈 SPRT
+<a id="-sprt"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/gauge.svg" alt="" width="20" height="20"> SPRT
 
 Use SPRT for questions such as: *Does this LMP change gain at least a small amount of Elo?*
 
@@ -161,11 +181,15 @@ tunex -c configs/ironphoenix.json sprt
 
 Tunex reports cumulative W/D/L, Elo estimate, LLR, boundaries, and current decision after every batch.
 
-### 📊 SPRT model note
+<a id="-sprt-model-note"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/calculator.svg" alt="" width="20" height="20"> SPRT model note
 
 The first Tunex release uses a **logistic-score SPRT**. Draws count as half a win and half a loss. This is intentionally simple and useful for development, but it is not a pentanomial paired-game SPRT. The raw W/D/L and Elo output are always shown so you can inspect the actual result.
 
-## 🎯 SPSA
+<a id="-spsa"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flask-conical.svg" alt="" width="20" height="20"> SPSA
 
 SPSA is useful for tuning several search constants simultaneously.
 
@@ -206,13 +230,17 @@ State is written after every iteration. Restarting the same command resumes from
 
 SPSA creates a `+` and `-` parameter vector each iteration, runs them directly against one another in paired games, estimates a gradient, and moves the center parameter vector.
 
-## 🚀 Parallelism
+<a id="-parallelism"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/cpu.svg" alt="" width="20" height="20"> Parallelism
 
 `match.workers` controls simultaneous games. Each game uses **two IronPhoenix processes**, so `workers = 4` can use up to eight engine processes at once.
 
 Start conservatively. For stable Elo testing, avoiding CPU oversubscription is more important than maximizing raw throughput.
 
-## 🛑 Stopping a run (Ctrl+C)
+<a id="-stopping-a-run-ctrlc"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/circle-stop.svg" alt="" width="20" height="20"> Stopping a run (Ctrl+C)
 
 Press **Ctrl+C** once in the terminal to interrupt a match, SPRT, or SPSA run. Tunex cancels games that have not started, signals active workers to stop, and closes their IronPhoenix subprocesses and redirected streams.
 
@@ -222,7 +250,9 @@ Press **Ctrl+C** once in the terminal to interrupt a match, SPRT, or SPSA run. T
 
 If IronPhoenix ignores `stop` / `quit`, Tunex force-terminates the subprocess rather than waiting indefinitely.
 
-## 🏁 Result termination
+<a id="-result-termination"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flag.svg" alt="" width="20" height="20"> Result termination
 
 Tunex currently ends a game when:
 
@@ -232,7 +262,9 @@ Tunex currently ends a game when:
 
 If IronPhoenix exits, hangs, or violates the expected protocol, the experiment fails rather than silently counting a bogus result.
 
-## 🧪 Suggested IronPhoenix workflow
+<a id="-suggested-ironphoenix-workflow"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/compass.svg" alt="" width="20" height="20"> Suggested IronPhoenix workflow
 
 For isolated feature tests:
 
@@ -255,6 +287,8 @@ For search tuning:
 
 For HCE tuning, Tunex can already tune the exposed material and mobility UCI weights by games. A future offline/Texel mode can add much faster position-loss optimization without changing the match/SPSA layer.
 
-## 📜 License
+<a id="-license"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/scale.svg" alt="" width="20" height="20"> License
 
 GPL-3.0-or-later. See `LICENSE`.
