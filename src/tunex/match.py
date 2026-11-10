@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import random
 import threading
-from typing import Any
+from typing import Any, Callable
 
 from .config import Config, VariantConfig
 from .engine import EngineError, SearchResult, UciEngine
@@ -137,7 +137,10 @@ def _merged_options(common: dict[str, Any], variant: VariantConfig) -> dict[str,
 def _play_game(
     config: Config, spec: GameSpec, baseline: VariantConfig, candidate: VariantConfig,
     cancel_event: threading.Event | None = None,
+    on_progress: Callable[[GameSpec, str, int], None] | None = None,
 ) -> GameRecord:
+    if on_progress is not None:
+        on_progress(spec, "starting", 0)
     if cancel_event is not None and cancel_event.is_set():
         raise EngineError("match interrupted")
     candidate_options = _merged_options(config.engine.common_options, candidate)
@@ -180,6 +183,8 @@ def _play_game(
         moves = _convert_opening(engines[spec.candidate_team],
                                  spec.start_fen, spec.opening_moves)
         opening_uci = list(moves)
+        if on_progress is not None:
+            on_progress(spec, "playing", len(moves))
         initial_side = _start_side(spec.start_fen)
         for _ in range(config.match.max_plies):
             if cancel_event is not None and cancel_event.is_set():
@@ -214,6 +219,8 @@ def _play_game(
                 )
 
             moves.append(result.bestmove)
+            if on_progress is not None and len(moves) % 16 == 0:
+                on_progress(spec, "playing", len(moves))
 
             # IronPhoenix encodes an immediate terminal king capture as mate 1
             # at the root (MATE_SCORE - 1). End immediately so the tuner does
@@ -286,6 +293,8 @@ class MatchRunner:
         games: int | None = None,
         offset: int = 0,
         write_results: bool = True,
+        on_progress: Callable[[GameSpec, str, int], None] | None = None,
+        on_game_complete: Callable[[GameRecord, WDL], None] | None = None,
     ) -> tuple[WDL, list[GameRecord]]:
         self.cancel_event.clear()
         baseline = baseline or self.config.baseline
@@ -301,13 +310,25 @@ class MatchRunner:
             wdl.add(record.result)
             if writer:
                 writer.write(record)
+            if on_game_complete is not None:
+                on_game_complete(record, wdl)
+
+        def play(spec: GameSpec) -> GameRecord:
+            # Preserve the existing five-argument call for legacy consumers
+            # and tests when live reporting is not requested.
+            if on_progress is None:
+                return _play_game(
+                    self.config, spec, baseline, candidate, self.cancel_event
+                )
+            return _play_game(
+                self.config, spec, baseline, candidate, self.cancel_event,
+                on_progress,
+            )
 
         if self.config.match.workers == 1:
             try:
                 for spec in specs:
-                    completed(_play_game(
-                        self.config, spec, baseline, candidate, self.cancel_event
-                    ))
+                    completed(play(spec))
             except BaseException:
                 self.cancel_event.set()
                 raise
@@ -316,11 +337,7 @@ class MatchRunner:
                 futures = {}
                 try:
                     futures = {
-                        pool.submit(
-                            _play_game, self.config, spec, baseline, candidate,
-                            self.cancel_event,
-                        ): spec
-                        for spec in specs
+                        pool.submit(play, spec): spec for spec in specs
                     }
                     for future in as_completed(futures):
                         spec = futures[future]

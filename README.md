@@ -259,7 +259,18 @@ Then run:
 tunex -c configs/ironphoenix.json sprt
 ```
 
-Tunex reports cumulative W/D/L, Elo estimate, LLR, boundaries, and current decision after every batch.
+Tunex immediately prints the two engine paths and search settings, then
+shows when each game starts, when its position reaches another 16 plies, and
+as soon as each game finishes. In multi-worker tests, progress lines may be
+interleaved; each line includes the game number. Game counters and W/D/L are
+updated after each completed game; SPRT LLR, hypothesis boundaries, Elo
+estimates and decisions are evaluated at **completed batch boundaries**.
+
+Progress output is unbuffered (`flush=True`). For older installs, run
+`git pull` and `python -m pip install -e .` before rerunning Tunex.
+The `match.games` setting controls fixed matches only; SPRT uses
+`sprt.max_games`. With `batch_games=2` and `workers=4`, at most two
+games will be active during each batch.
 
 <a id="-sprt-model-note"></a>
 

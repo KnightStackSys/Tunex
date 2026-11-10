@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import threading
 
 from .config import Config
 from .engine import EngineError, UciEngine
-from .match import MatchRunner
+from .match import GameRecord, GameSpec, MatchRunner
 from .sprt import SprtState
 from .spsa import SpsaRunner
 from .stats import WDL, format_summary
@@ -42,9 +43,44 @@ def command_probe(config: Config) -> int:
     return 0
 
 
+def _game_progress(label: str, lock: threading.Lock):
+    """Progress callback is called on worker threads; serialize console lines."""
+    def report(spec: GameSpec, stage: str, plies: int) -> None:
+        with lock:
+            team = "Red+Yellow" if spec.candidate_team == 0 else "Blue+Green"
+            if stage == "starting":
+                print(f"[{label}] Game {spec.game_id + 1} starting | candidate {team}",
+                      flush=True)
+            else:
+                print(f"[{label}] Game {spec.game_id + 1} playing | ply {plies}",
+                      flush=True)
+    return report
+
+
 def command_match(config: Config, games: int | None) -> int:
     runner = MatchRunner(config)
-    wdl, records = runner.run(games=games)
+    target = games if games is not None else config.match.games
+    output_lock = threading.Lock()
+
+    def completed(record: GameRecord, wdl: WDL) -> None:
+        label = ("WIN" if record.result == 1.0
+                 else "LOSS" if record.result == 0.0 else "DRAW")
+        with output_lock:
+            print(
+                f"[Match] Completed {wdl.games}/{target} | "
+                f"game {record.game_id + 1}: {label} | "
+                f"W/D/L {wdl.wins}/{wdl.draws}/{wdl.losses}",
+                flush=True,
+            )
+
+    print(
+        f"[Match] Starting {target} games with {config.match.workers} workers | "
+        f"{config.search.go_command()}", flush=True,
+    )
+    wdl, records = runner.run(
+        games=games, on_progress=_game_progress("Match", output_lock),
+        on_game_complete=completed,
+    )
     print(format_summary(wdl))
     reasons: dict[str, int] = {}
     for record in records:
@@ -63,6 +99,19 @@ def command_sprt(config: Config) -> int:
     )
     total = WDL()
     played = 0
+    output_lock = threading.Lock()
+
+    print(
+        f"[SPRT] Starting | baseline={config.baseline.path or config.engine.path} "
+        f"| candidate={config.candidate.path or config.engine.path}",
+        flush=True,
+    )
+    print(
+        f"[SPRT] Up to {config.sprt.max_games} games | "
+        f"batch={config.sprt.batch_games} | "
+        f"workers={config.match.workers} | {config.search.go_command()}",
+        flush=True,
+    )
 
     while played < config.sprt.max_games and state.decision == "continue":
         batch = min(config.sprt.batch_games, config.sprt.max_games - played)
@@ -71,7 +120,25 @@ def command_sprt(config: Config) -> int:
         if batch <= 0:
             break
 
-        batch_wdl, _ = runner.run(games=batch, offset=played)
+        def completed(record: GameRecord, batch_wdl: WDL) -> None:
+            result_label = ("WIN" if record.result == 1.0
+                            else "LOSS" if record.result == 0.0 else "DRAW")
+            with output_lock:
+                print(
+                    f"[SPRT] Completed {played + batch_wdl.games}/"
+                    f"{config.sprt.max_games} | "
+                    f"game {record.game_id + 1}: {result_label} | "
+                    f"W/D/L {total.wins + batch_wdl.wins}/"
+                    f"{total.draws + batch_wdl.draws}/"
+                    f"{total.losses + batch_wdl.losses}",
+                    flush=True,
+                )
+
+        batch_wdl, _ = runner.run(
+            games=batch, offset=played,
+            on_progress=_game_progress("SPRT", output_lock),
+            on_game_complete=completed,
+        )
         total.extend(batch_wdl)
         played += batch
         state.update(total)
