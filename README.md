@@ -81,6 +81,17 @@ Tunex performs a UCI handshake, validates configured option names, applies the o
 
 If a configured tuning option is not advertised, Tunex fails early instead of silently running a useless match.
 
+## 🔄 New-game reset and correction histories
+
+Tunex sends `ucinewgame` to **both** IronPhoenix processes after applying
+their UCI options and waits for `readyok` **before every game**, including
+each game in a paired match, SPRT batch, or SPSA iteration. It does **not**
+send `ucinewgame` between moves in the same game. This preserves IronPhoenix's
+game-long pawn and continuation correction histories and clears them between
+games. The engine processes are also newly created for each game.
+
+This protocol is regression-tested for both serial and parallel match workers.
+
 ## ♟️ Run a fixed match
 
 ```bash
