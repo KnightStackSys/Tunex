@@ -256,3 +256,95 @@ def test_illegal_san_fails_before_search():
     engine = SimpleNamespace(opening_position=lambda _: (red, ["e1f3"]))
     with pytest.raises(EngineError, match="opening ply 1.*illegal SAN"):
         _convert_opening(engine, None, ("Nf4",))
+
+
+def test_user_long_algebraic_four_seat_opening():
+    """Examples from an actual 4PC opening file; '+' is not a UCI suffix."""
+    positions = [
+        ("R", {"g2": "rP"}, "g2-g4", "g2g4"),
+        ("B", {"b7": "bP"}, "b7-c7+", "b7c7"),
+        ("Y", {"g13": "yP"}, "g13-g12", "g13g12"),
+        ("G", {"m8": "gP"}, "m8-l8", "m8l8"),
+        ("R", {"e1": "rN"}, "Ne1-f3", "e1f3"),
+    ]
+    for turn, pieces, token, expected in positions:
+        assert san_to_uci(token, make_fen(turn, pieces), [expected]) == expected
+
+
+def test_user_long_algebraic_piece_captures():
+    """Captured-piece prefixes in Chess.com 4PC PGN4 are not destinations."""
+    captures = [
+        # side, origin piece, destination victim, long algebraic, UCI
+        ("R", "g1", "rQ", "d4", "bP", "Qg1xd4", "g1d4"),
+        ("B", "a4", "bR", "d4", "rQ", "Ra4xQd4", "a4d4"),
+        ("Y", "h12", "yB", "b6", "bP", "Bh12xb6+", "h12b6"),
+        ("G", "n7", "gQ", "i2", "rP", "Qn7xi2+", "n7i2"),
+        ("R", "h1", "rK", "i2", "gQ", "Kh1xQi2", "h1i2"),
+        ("B", "a7", "bK", "b6", "yB", "Ka7xBb6", "a7b6"),
+        ("B", "b6", "bP", "c7", "rB", "b6xBc7", "b6c7"),
+        ("R", "i1", "rB", "c7", "bP", "Bi1xc7", "i1c7"),
+        ("Y", "f14", "yB", "l8", "gP", "Bf14xl8", "f14l8"),
+    ]
+    for turn, src, attacker, dst, victim, token, expected in captures:
+        fen = make_fen(turn, {src: attacker, dst: victim})
+        assert san_to_uci(token, fen, [expected]) == expected
+
+    wrong_victim = make_fen("B", {"a4": "bR", "d4": "rN"})
+    with pytest.raises(ValueError, match="illegal SAN"):
+        san_to_uci("Ra4xQd4", wrong_victim, ["a4d4"])
+
+
+def test_unprefixed_incremental_long_algebraic_opening_lines():
+    """Every line is an independent opening, including prefix expansions."""
+    source = (
+        "g2-g4\n"
+        "g2-g4 b7-c7+\n"
+        "g2-g4 b7-c7+ g13-g12\n"
+        "g2-g4 b7-c7+ g13-g12 m8-l8\n"
+        "g2-g4 b7-c7+ g13-g12 m8-l8 Ne1-f3\n"
+        "f2-f3 b9-c9 g13-g12 m8-l8 h2-h3 b4-d4 "
+        "Bf14-h12 m6-l6 Qg1xd4 Ra4xQd4 Bh12xb6+ "
+        "Qn7xi2+ Kh1xQi2 Ka7xBb6\n"
+    )
+    with TemporaryDirectory() as temp:
+        path = Path(temp) / "long_algebraic.txt"
+        path.write_text(source, encoding="utf-8")
+        parsed = _load_openings(str(path))
+    assert len(parsed) == 6
+    assert all(fen is None for fen, _ in parsed)
+    assert [len(tokens) for _, tokens in parsed] == [1, 2, 3, 4, 5, 14]
+    assert parsed[1][1] == ("g2-g4", "b7-c7+")
+    assert parsed[-1][1][-4:] == (
+        "Bh12xb6+", "Qn7xi2+", "Kh1xQi2", "Ka7xBb6"
+    )
+
+
+def test_long_algebraic_prefix_converts_to_uci_before_gameplay():
+    """Every prefix snapshot comes from native engine legal moves + FEN4."""
+    positions = [
+        ("R", {"g2": "rP"}, "g2g4"),
+        ("B", {"b7": "bP"}, "b7c7"),
+        ("Y", {"g13": "yP"}, "g13g12"),
+        ("G", {"m8": "gP"}, "m8l8"),
+        ("R", {"e1": "rN"}, "e1f3"),
+    ]
+    calls = []
+    class FakeEngine:
+        def opening_position(self, command):
+            index = len(calls)
+            calls.append(command)
+            turn, board, move = positions[index]
+            return make_fen(turn, board), (move,)
+
+    result = _convert_opening(
+        FakeEngine(), None,
+        ("g2-g4", "b7-c7+", "g13-g12", "m8-l8", "Ne1-f3"),
+    )
+    assert result == ["g2g4", "b7c7", "g13g12", "m8l8", "e1f3"]
+    assert calls == [
+        "position startpos",
+        "position startpos moves g2g4",
+        "position startpos moves g2g4 b7c7",
+        "position startpos moves g2g4 b7c7 g13g12",
+        "position startpos moves g2g4 b7c7 g13g12 m8l8",
+    ]

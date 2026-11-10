@@ -149,6 +149,23 @@ SAN supports ordinary piece moves such as `Nf3`, captures `Bxe5` / `hxi5`,
 source disambiguation (`Nef3`), castling (`O-O` / `O-O-O`), promotions
 (`g11=Q`), and trailing check or annotation symbols. Four-player
 PGN-style long algebraic moves such as `Ne1-f3` are supported too.
+For Chess.com four-player opening books, **each line can be an independent
+opening or an increasingly long prefix**, without a `moves` header:
+
+```text
+g2-g4
+g2-g4 b7-c7+
+g2-g4 b7-c7+ g13-g12
+g2-g4 b7-c7+ g13-g12 m8-l8
+g2-g4 b7-c7+ g13-g12 m8-l8 Ne1-f3
+```
+
+The converter also recognizes captured-piece identification, such as
+`Ra4xQd4`, `b6xBc7`, `Kh1xQi2`, and `Ka7xBb6`.
+These examples are **long algebraic (PGN4)** rather than short SAN;
+Tunex supports both and removes trailing check markers (`+`, `#`)
+before passing UCI moves to IronPhoenix. The engine's legal move list
+still determines whether an opening is valid.
 
 You can combine SAN with a custom Chess.com FEN4:
 
