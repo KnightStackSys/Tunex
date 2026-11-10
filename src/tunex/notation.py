@@ -119,10 +119,14 @@ def san_to_uci(token: str, fen: str, legal_moves: Iterable[str]) -> str:
     else:
         match = long_match or san_match
         assert match is not None
-        expected_piece = (match["piece"] or "P").upper()
+        source_filter = match["from"].lower() if long_match else (match["source"] or "").lower()
+        # A PGN4 long-algebraic coordinate can omit the piece letter.
+        # Unlike SAN pawn notation, its source square tells us the real type.
+        expected_piece = ((match["piece"] or
+                           (board.get(source_filter, "")[1:] if long_match else "P"))
+                          .upper())
         dest = match["to"].lower()
         promo = (match["promo"] or "").lower()
-        source_filter = match["from"].lower() if long_match else (match["source"] or "").lower()
         capture_flag = bool(match["separator"] == "x") if long_match else bool(match["capture"])
         candidates = []
         for move in legal:
@@ -148,6 +152,10 @@ def san_to_uci(token: str, fen: str, legal_moves: Iterable[str]) -> str:
                     continue
             if _is_capture(board, expected_piece, src, dest) != capture_flag:
                 continue
+            if long_match and match["captured"]:
+                victim = board.get(dest)
+                if victim is None or victim[1].upper() != match["captured"].upper():
+                    continue
             candidates.append(move)
 
     if not candidates:

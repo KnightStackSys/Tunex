@@ -179,6 +179,7 @@ def _play_game(
         # without resetting the engines' correction histories during play.
         moves = _convert_opening(engines[spec.candidate_team],
                                  spec.start_fen, spec.opening_moves)
+        opening_uci = list(moves)
         initial_side = _start_side(spec.start_fen)
         for _ in range(config.match.max_plies):
             if cancel_event is not None and cancel_event.is_set():
@@ -206,7 +207,7 @@ def _play_game(
                     reason=reason,
                     plies=len(moves),
                     moves=moves,
-                    opening_moves=list(spec.opening_moves),
+                    opening_moves=list(opening_uci),
                     start_fen=spec.start_fen,
                     last_score_cp=result.score_cp,
                     last_score_mate=result.score_mate,
@@ -227,7 +228,7 @@ def _play_game(
                     reason="terminal-king-capture",
                     plies=len(moves),
                     moves=moves,
-                    opening_moves=list(spec.opening_moves),
+                    opening_moves=list(opening_uci),
                     start_fen=spec.start_fen,
                     last_score_cp=result.score_cp,
                     last_score_mate=result.score_mate,
@@ -241,7 +242,7 @@ def _play_game(
             reason="max-plies",
             plies=len(moves),
             moves=moves,
-            opening_moves=list(spec.opening_moves),
+            opening_moves=list(opening_uci),
             start_fen=spec.start_fen,
             last_score_cp=last_result.score_cp if last_result else None,
             last_score_mate=last_result.score_mate if last_result else None,
