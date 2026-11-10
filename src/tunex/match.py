@@ -10,6 +10,7 @@ from typing import Any
 
 from .config import Config, VariantConfig
 from .engine import EngineError, SearchResult, UciEngine
+from .notation import coordinate_move, san_to_uci
 from .stats import WDL
 
 
@@ -62,13 +63,20 @@ def _load_openings(path: str | None) -> list[tuple[str | None, tuple[str, ...]]]
         if not line or line.startswith("#"):
             continue
         if line.startswith("fen "):
+            # SAN and mixed UCI/SAN work after any custom FEN4, including
+            # a metadata block that may contain spaces.
             if " | moves " in line:
                 fen, move_text = line[4:].split(" | moves ", 1)
+                openings.append((fen.strip(), tuple(move_text.split())))
+            elif " | san " in line:
+                fen, move_text = line[4:].split(" | san ", 1)
                 openings.append((fen.strip(), tuple(move_text.split())))
             else:
                 openings.append((line[4:].strip(), ()))
         elif line.startswith("moves "):
             openings.append((None, tuple(line[6:].split())))
+        elif line.startswith("san "):
+            openings.append((None, tuple(line[4:].split())))
         else:
             openings.append((None, tuple(line.split())))
     if not openings:
@@ -87,12 +95,31 @@ def _position_command(start_fen: str | None, moves: list[str]) -> str:
 
 
 def _start_side(start_fen: str | None) -> int:
-    if not start_fen:
+    if not start_fen or start_fen.strip().upper() == "4PC":
         return 0
     first = start_fen.lstrip()[:1].upper()
     if first not in COLOR_TO_INDEX:
         raise ValueError(f"unable to read side-to-move from FEN4: {start_fen!r}")
     return COLOR_TO_INDEX[first]
+
+
+def _convert_opening(engine: UciEngine, start_fen: str | None,
+                     opening_moves: tuple[str, ...]) -> list[str]:
+    """Convert SAN to UCI before gameplay; leave existing UCI moves intact."""
+    result: list[str] = []
+    for ply, token in enumerate(opening_moves, 1):
+        uci = coordinate_move(token)
+        if uci is None:
+            position = _position_command(start_fen, result)
+            try:
+                fen, legal_moves = engine.opening_position(position)
+                uci = san_to_uci(token, fen, legal_moves)
+            except (EngineError, ValueError) as exc:
+                raise EngineError(
+                    f"opening ply {ply}: {exc} (input {token!r})"
+                ) from exc
+        result.append(uci)
+    return result
 
 
 def _candidate_result(winner_team: int | None, candidate_team: int) -> float:
@@ -135,7 +162,7 @@ def _play_game(
         ),
     }
 
-    moves = list(spec.opening_moves)
+    moves: list[str] = []
     last_result: SearchResult | None = None
 
     try:
@@ -146,6 +173,13 @@ def _play_game(
         for engine in engines.values():
             engine.new_game()
 
+        # Convert against IronPhoenix's actual legal 4PC move list rather
+        # than applying orthodox 8x8 SAN rules. The same converted opening
+        # is used by either team in paired games; conversion runs BEFORE go,
+        # without resetting the engines' correction histories during play.
+        moves = _convert_opening(engines[spec.candidate_team],
+                                 spec.start_fen, spec.opening_moves)
+        opening_uci = list(moves)
         initial_side = _start_side(spec.start_fen)
         for _ in range(config.match.max_plies):
             if cancel_event is not None and cancel_event.is_set():
@@ -173,7 +207,7 @@ def _play_game(
                     reason=reason,
                     plies=len(moves),
                     moves=moves,
-                    opening_moves=list(spec.opening_moves),
+                    opening_moves=list(opening_uci),
                     start_fen=spec.start_fen,
                     last_score_cp=result.score_cp,
                     last_score_mate=result.score_mate,
@@ -194,7 +228,7 @@ def _play_game(
                     reason="terminal-king-capture",
                     plies=len(moves),
                     moves=moves,
-                    opening_moves=list(spec.opening_moves),
+                    opening_moves=list(opening_uci),
                     start_fen=spec.start_fen,
                     last_score_cp=result.score_cp,
                     last_score_mate=result.score_mate,
@@ -208,7 +242,7 @@ def _play_game(
             reason="max-plies",
             plies=len(moves),
             moves=moves,
-            opening_moves=list(spec.opening_moves),
+            opening_moves=list(opening_uci),
             start_fen=spec.start_fen,
             last_score_cp=last_result.score_cp if last_result else None,
             last_score_mate=last_result.score_mate if last_result else None,
