@@ -1,0 +1,44 @@
+{
+  "engine": {
+    "path": "C:/Engines/IronPhoenix-old.exe",
+    "startup_timeout": 10,
+    "move_timeout": 60,
+    "strict_options": true,
+    "common_options": {
+      "Hash": 64,
+      "MultiPV": 1,
+      "UseNNUE": false
+    }
+  },
+  "baseline": {
+    "name": "Old engine",
+    "path": "C:/Engines/IronPhoenix-old.exe",
+    "options": {}
+  },
+  "candidate": {
+    "name": "New engine",
+    "path": "C:/Engines/IronPhoenix-new.exe",
+    "options": {}
+  },
+  "search": {
+    "mode": "movetime",
+    "value": 250
+  },
+  "match": {
+    "games": 100,
+    "workers": 2,
+    "max_plies": 320,
+    "paired": true,
+    "seed": 20261009,
+    "openings_file": null,
+    "results_file": "results/binary-sprt-games.jsonl"
+  },
+  "sprt": {
+    "elo0": 0,
+    "elo1": 5,
+    "alpha": 0.05,
+    "beta": 0.05,
+    "max_games": 10000,
+    "batch_games": 20
+  }
+}
