@@ -220,6 +220,47 @@ class UciEngine:
                     info_line=last_info,
                 )
 
+    def opening_position(self, position_command: str) -> tuple[str, tuple[str, ...]]:
+        """Get native FEN4 + legal UCI moves for SAN opening conversion.
+
+        The complete position command is replayed before every conversion,
+        so the native 4PC engine remains responsible for legal move generation
+        (including check, en passant, castling and promotion rules).
+        """
+        self.send(position_command)
+        self.send("fen")
+        self.send("moves")
+        self.send("isready")
+        lines = self._read_until(lambda line: line == "readyok", self.startup_timeout)
+
+        for line in lines:
+            if line.startswith("info string ") and any(
+                phrase in line.lower() for phrase in (
+                    "move list error", "fen4 error", "startfen failed",
+                    "expected: position", "moves supplied after terminal",
+                )
+            ):
+                raise EngineError(f"{self.name}: invalid opening position: {line}")
+
+        fen = next(
+            (line for line in lines
+             if line[:2].upper() in {"R-", "B-", "Y-", "G-"} and "/" in line),
+            None,
+        )
+        listing = next((line for line in lines if line.startswith("legal moves (")), None)
+        if fen is None or listing is None:
+            raise EngineError(
+                f"{self.name} must support the IronPhoenix 'fen' and 'moves' "
+                "commands to convert SAN openings"
+            )
+        match = re.fullmatch(r"legal moves \((\d+)\):(.*)", listing)
+        if match is None:
+            raise EngineError(f"{self.name}: malformed legal move listing")
+        moves = tuple(match.group(2).split())
+        if len(moves) != int(match.group(1)):
+            raise EngineError(f"{self.name}: incomplete legal move listing")
+        return fen, moves
+
     def side_in_check(self, position_command: str) -> bool | None:
         self.send(position_command)
         self.send("d")
