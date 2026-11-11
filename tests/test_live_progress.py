@@ -95,7 +95,7 @@ def test_sprt_quiet_progress_does_not_change_match_progress(capsys):
     quiet(spec, "playing", 0)
     quiet(spec, "playing", 16)
     assert capsys.readouterr().out == (
-        "[SPRT] Game 8 starting | candidate Blue+Green\\n"
+        "[SPRT] Game 8 starting | candidate Blue+Green\n"
     )
 
     verbose = _game_progress("Match", threading.Lock())
@@ -103,9 +103,9 @@ def test_sprt_quiet_progress_does_not_change_match_progress(capsys):
     verbose(spec, "playing", 0)
     verbose(spec, "playing", 16)
     assert capsys.readouterr().out == (
-        "[Match] Game 8 starting | candidate Blue+Green\\n"
-        "[Match] Game 8 playing | ply 0\\n"
-        "[Match] Game 8 playing | ply 16\\n"
+        "[Match] Game 8 starting | candidate Blue+Green\n"
+        "[Match] Game 8 playing | ply 0\n"
+        "[Match] Game 8 playing | ply 16\n"
     )
 
 
