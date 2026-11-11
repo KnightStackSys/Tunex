@@ -146,6 +146,49 @@ def test_opening_file_accepts_san_prefix_mixed_and_custom_fen():
     assert _start_side("B-test") == 1
 
 
+def test_plain_fen4_lines_can_be_loaded_from_txt_and_paired():
+    red = make_fen("R", {"e1": "rN"}, metadata=True)
+    blue = make_fen("B", {"a7": "bK"})
+    green = make_fen("G", {"m7": "gP"})
+
+    with TemporaryDirectory() as temp:
+        path = Path(temp) / "positions.txt"
+        path.write_text(
+            "\ufeff# One FEN4 per line; leading BOM, comments, and blank lines work\n"
+            f"{red}\n"
+            "\n"
+            f"  {blue}  \n"
+            f"fen {green}\n"
+            f"{red} | moves e1f3\n"
+            f"fen {blue} | san c7\n"
+            "4PC\n"
+            "moves e2e3 b7c7\n"
+            "Ra4xQd4\n",
+            encoding="utf-8",
+        )
+        assert _load_openings(str(path)) == [
+            (red, ()),
+            (blue, ()),
+            (green, ()),
+            (red, ("e1f3",)),
+            (blue, ("c7",)),
+            ("4PC", ()),
+            (None, ("e2e3", "b7c7")),
+            (None, ("Ra4xQd4",)),
+        ]
+        config = SimpleNamespace(
+            match=SimpleNamespace(openings_file=str(path), paired=True, seed=20261009)
+        )
+        specs = MatchRunner(config)._specs(20)
+
+    for first, second in zip(specs[::2], specs[1::2]):
+        assert first.candidate_team == 0
+        assert second.candidate_team == 1
+        assert first.start_fen == second.start_fen
+        assert first.opening_moves == second.opening_moves
+        assert first.game_id + 1 == second.game_id
+
+
 def test_engine_snapshot_sends_position_then_fen_moves_and_ready_barrier():
     fen = make_fen(pieces={"e1": "rN"})
     engine = UciEngine("unused", name="san-probe")
