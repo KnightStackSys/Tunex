@@ -43,9 +43,13 @@ def command_probe(config: Config) -> int:
     return 0
 
 
-def _game_progress(label: str, lock: threading.Lock):
+def _game_progress(
+    label: str, lock: threading.Lock, *, show_playing: bool = True
+):
     """Progress callback is called on worker threads; serialize console lines."""
     def report(spec: GameSpec, stage: str, plies: int) -> None:
+        if stage == "playing" and not show_playing:
+            return
         with lock:
             team = "Red+Yellow" if spec.candidate_team == 0 else "Blue+Green"
             if stage == "starting":
@@ -136,7 +140,7 @@ def command_sprt(config: Config) -> int:
 
         batch_wdl, _ = runner.run(
             games=batch, offset=played,
-            on_progress=_game_progress("SPRT", output_lock),
+            on_progress=_game_progress("SPRT", output_lock, show_playing=False),
             on_game_complete=completed,
         )
         total.extend(batch_wdl)
