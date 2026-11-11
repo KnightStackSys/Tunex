@@ -54,25 +54,41 @@ class ResultWriter:
                 handle.write(line + "\n")
 
 
+def _is_bare_fen4(line: str) -> bool:
+    """Recognize native Chess.com 4PC FENs without confusing them with SAN."""
+    return (line.upper() == "4PC"
+            or (len(line) >= 2 and line[0].upper() in COLORS and line[1] == "-"))
+
+
 def _load_openings(path: str | None) -> list[tuple[str | None, tuple[str, ...]]]:
     if not path:
         return [(None, ())]
     openings: list[tuple[str | None, tuple[str, ...]]] = []
-    for raw in Path(path).read_text(encoding="utf-8").splitlines():
+    # utf-8-sig also accepts UTF-8 text files saved with a Windows BOM.
+    for raw in Path(path).read_text(encoding="utf-8-sig").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        if line.startswith("fen "):
-            # SAN and mixed UCI/SAN work after any custom FEN4, including
-            # a metadata block that may contain spaces.
-            if " | moves " in line:
-                fen, move_text = line[4:].split(" | moves ", 1)
+
+        # One native FEN4 per line works without the old "fen " prefix.
+        # Keep the prefixed form and its optional move suffixes compatible.
+        fen_text = None
+        if line[:4].lower() == "fen ":
+            fen_text = line[4:].strip()
+        elif _is_bare_fen4(line):
+            fen_text = line
+
+        if fen_text is not None:
+            # Metadata inside Chess.com FEN4 may contain spaces, so only
+            # split on an explicit " | moves " or " | san " separator.
+            if " | moves " in fen_text:
+                fen, move_text = fen_text.split(" | moves ", 1)
                 openings.append((fen.strip(), tuple(move_text.split())))
-            elif " | san " in line:
-                fen, move_text = line[4:].split(" | san ", 1)
+            elif " | san " in fen_text:
+                fen, move_text = fen_text.split(" | san ", 1)
                 openings.append((fen.strip(), tuple(move_text.split())))
             else:
-                openings.append((line[4:].strip(), ()))
+                openings.append((fen_text, ()))
         elif line.startswith("moves "):
             openings.append((None, tuple(line[6:].split())))
         elif line.startswith("san "):
