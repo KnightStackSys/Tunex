@@ -289,11 +289,13 @@ tunex -c configs/ironphoenix.json sprt
 ```
 
 Tunex immediately prints the two engine paths and search settings, then
-shows when each game starts, when its position reaches another 16 plies, and
-as soon as each game finishes. In multi-worker tests, progress lines may be
-interleaved; each line includes the game number. Game counters and W/D/L are
-updated after each completed game; SPRT LLR, hypothesis boundaries, Elo
-estimates and decisions are evaluated at **completed batch boundaries**.
+shows when each game starts and as soon as each game finishes, without
+printing repeated per-ply `Game ... playing | ply ...` messages.
+In multi-worker tests, start and completion lines may be interleaved; each
+includes the game number. Game counters and W/D/L are updated after each
+completed game; SPRT LLR, hypothesis boundaries, Elo estimates and decisions
+are evaluated at **completed batch boundaries**. Fixed matches retain
+their existing per-ply progress messages.
 
 Progress output is unbuffered (`flush=True`). For older installs, run
 `git pull` and `python -m pip install -e .` before rerunning Tunex.
