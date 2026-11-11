@@ -216,6 +216,31 @@ Tunex supports both and removes trailing check markers (`+`, `#`)
 before passing UCI moves to IronPhoenix. The engine's legal move list
 still determines whether an opening is valid.
 
+### Use one FEN4 position per line
+
+You can also provide a plain UTF-8 `.txt` file with **one complete native
+Chess.com FEN4 per line**, without a `fen ` prefix. FEN4 lines begin with
+`R-`, `B-`, `Y-`, or `G-` (the side to move). The literal `4PC`
+also works for the default starting position. Blank lines and lines
+beginning with `#` are skipped.
+
+Set `match.openings_file` in your JSON configuration, for example:
+
+```json
+"match": {
+  "games": 100,
+  "workers": 4,
+  "paired": true,
+  "openings_file": "positions.txt"
+}
+```
+
+File paths are relative to the **config file's directory** unless absolute.
+Each game randomly selects an entry; paired games reuse the **same FEN4
+position** while swapping the candidate and baseline teams. This also works
+for SPRT and SPSA because all modes use the same match runner.
+
+The original prefixed syntax and SAN/UCI move lists remain supported.
 You can combine SAN with a custom Chess.com FEN4:
 
 ```text
@@ -223,6 +248,10 @@ fen <FEN4> | san Nf3 c7
 fen <FEN4> | moves e1f3 c7
 fen 4PC | san e3 c7
 ```
+
+You can also omit `fen ` from these lines when supplying a native FEN4.
+Only use complete, valid FEN4 snapshots; do not replace the fields with
+placeholders such as `R-...`.
 
 Tunex queries IronPhoenix for the **current legal 4PC moves and FEN4**
 to resolve SAN into unique UCI coordinates before gameplay. Invalid,
