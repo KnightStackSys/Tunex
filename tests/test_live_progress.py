@@ -1,12 +1,13 @@
 """Live progress covers games that have not finished and SPRT batches."""
 
+import threading
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from tunex.cli import command_sprt
+from tunex.cli import _game_progress, command_sprt
 from tunex.config import SearchConfig, SprtConfig, VariantConfig
 from tunex.engine import SearchResult
-from tunex.match import MatchRunner
+from tunex.match import GameSpec, MatchRunner
 
 
 class FakeEngine:
@@ -87,6 +88,27 @@ def test_legacy_match_without_callback_does_not_change_engine_contract():
     assert len(records) == 2
 
 
+def test_sprt_quiet_progress_does_not_change_match_progress(capsys):
+    spec = GameSpec(game_id=7, candidate_team=1)
+    quiet = _game_progress("SPRT", threading.Lock(), show_playing=False)
+    quiet(spec, "starting", 0)
+    quiet(spec, "playing", 0)
+    quiet(spec, "playing", 16)
+    assert capsys.readouterr().out == (
+        "[SPRT] Game 8 starting | candidate Blue+Green\\n"
+    )
+
+    verbose = _game_progress("Match", threading.Lock())
+    verbose(spec, "starting", 0)
+    verbose(spec, "playing", 0)
+    verbose(spec, "playing", 16)
+    assert capsys.readouterr().out == (
+        "[Match] Game 8 starting | candidate Blue+Green\\n"
+        "[Match] Game 8 playing | ply 0\\n"
+        "[Match] Game 8 playing | ply 16\\n"
+    )
+
+
 def test_sprt_prints_start_per_game_and_batch_decision(capsys, tmp_path):
     cfg = config(workers=2, plies=17)
     cfg.match.results_file = str(tmp_path / "games.jsonl")
@@ -100,7 +122,9 @@ def test_sprt_prints_start_per_game_and_batch_decision(capsys, tmp_path):
     assert "workers=2 | go movetime 250" in output
     assert "Game 1 starting" in output
     assert "Game 2 starting" in output
-    assert "ply 16" in output
+    assert "[SPRT] Game 1 playing | ply" not in output
+    assert "[SPRT] Game 2 playing | ply" not in output
+    assert " playing | ply " not in output
     assert "[SPRT] Completed 1/2" in output
     assert "[SPRT] Completed 2/2" in output
     assert "SPRT reached max_games" in output
