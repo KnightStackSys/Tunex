@@ -69,7 +69,7 @@ test results reflect SpellWarden's current rules implementation.
 IronPhoenix four-player behavior, FEN4/SAN4 parsing, team pairing, and all
 existing configs remain unchanged when `variant` is omitted.
 
-## Bayesian optimization (TPE)
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/brain-circuit.svg" alt="" width="20" height="20"> Bayesian optimization (TPE)
 
 TuneX supports a dependency-free **Tree-structured Parzen Estimator (TPE)**
 for model-guided optimization of discrete/integer UCI parameters. It samples
