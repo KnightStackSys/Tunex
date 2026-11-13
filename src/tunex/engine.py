@@ -261,6 +261,63 @@ class UciEngine:
             raise EngineError(f"{self.name}: incomplete legal move listing")
         return fen, moves
 
+    def spell_status(self, position_command: str) -> tuple[str, bool]:
+        """Read SpellWarden's board and exact side-to-move check status.
+
+        The spell-aware attack rules belong to SpellWarden, not Tunex.
+        Requires SpellWarden's 'd' command to emit 'info string check: yes/no'.
+        """
+        self.send(position_command)
+        self.send("d")
+        self.send("isready")
+        lines = self._read_until(lambda line: line == "readyok", self.startup_timeout)
+        for line in lines:
+            if line.startswith("info string ") and any(
+                token in line.lower() for token in (
+                    "illegal move", "invalid move", "fen requires", "unknown command",
+                )
+            ):
+                raise EngineError(f"{self.name}: {line}")
+        fen = next(
+            (line[len("info string FEN "):] for line in lines
+             if line.startswith("info string FEN ")), None
+        )
+        check = next(
+            (_CHECK_RE.search(line).group(1).lower() == "yes"
+             for line in lines if _CHECK_RE.search(line)), None
+        )
+        if fen is None or check is None:
+            raise EngineError(
+                f"{self.name} needs SpellWarden's FEN and check status from 'd'; "
+                "use the SpellWarden integration branch"
+            )
+        return fen, check
+
+    def spell_legal_turns(self, position_command: str) -> set[str]:
+        """Get full spell turns via SpellWarden's exhaustive legalmoves command."""
+        self.send(position_command)
+        self.send("legalmoves")
+        self.send("isready")
+        lines = self._read_until(lambda line: line == "readyok", self.startup_timeout)
+        header = next(
+            (line for line in lines if line.startswith("info string legal turns ")),
+            None,
+        )
+        if header is None:
+            raise EngineError(f"{self.name} does not support SpellWarden legalmoves")
+        match = re.fullmatch(r"info string legal turns (\d+)", header)
+        if match is None:
+            raise EngineError(f"{self.name}: invalid legal turns header")
+        start = lines.index(header) + 1
+        count = int(match.group(1))
+        turns = [
+            line[len("info string "):] for line in lines[start:start + count]
+            if line.startswith("info string ")
+        ]
+        if len(turns) != count:
+            raise EngineError(f"{self.name}: incomplete legal turns listing")
+        return set(turns)
+
     def side_in_check(self, position_command: str) -> bool | None:
         self.send(position_command)
         self.send("d")

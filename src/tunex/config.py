@@ -206,11 +206,15 @@ class Config:
     candidate: VariantConfig
     sprt: SprtConfig
     spsa: SpsaConfig | None = None
+    variant: str = "four_player_teams"
 
     @classmethod
     def load(cls, path: str | Path) -> "Config":
         config_path = Path(path)
         data = json.loads(config_path.read_text(encoding="utf-8"))
+        variant = str(data.get("variant", "four_player_teams")).lower()
+        if variant not in {"four_player_teams", "spell_chess"}:
+            raise ValueError("variant must be four_player_teams or spell_chess")
         engine = EngineConfig.from_dict(data.get("engine", {}))
         match = MatchConfig.from_dict(data.get("match"))
         openings = match.openings_file
@@ -220,9 +224,9 @@ class Config:
             engine.path = str((config_path.parent / engine.path).resolve())
         baseline = VariantConfig.from_dict(data.get("baseline", {}), "baseline")
         candidate = VariantConfig.from_dict(data.get("candidate", {}), "candidate")
-        for variant in (baseline, candidate):
-            if variant.path is not None and not Path(variant.path).is_absolute():
-                variant.path = str((config_path.parent / variant.path).resolve())
+        for engine_variant in (baseline, candidate):
+            if engine_variant.path is not None and not Path(engine_variant.path).is_absolute():
+                engine_variant.path = str((config_path.parent / engine_variant.path).resolve())
         return cls(
             engine=engine,
             search=SearchConfig.from_dict(data.get("search")),
@@ -231,4 +235,5 @@ class Config:
             candidate=candidate,
             sprt=SprtConfig.from_dict(data.get("sprt")),
             spsa=SpsaConfig.from_dict(data["spsa"]) if "spsa" in data else None,
+            variant=variant,
         )
