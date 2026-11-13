@@ -63,6 +63,46 @@ test results reflect SpellWarden's current rules implementation.
 IronPhoenix four-player behavior, FEN4/SAN4 parsing, team pairing, and all
 existing configs remain unchanged when `variant` is omitted.
 
+## Bayesian optimization (TPE)
+
+TuneX supports a dependency-free **Tree-structured Parzen Estimator (TPE)**
+for model-guided optimization of discrete/integer UCI parameters. It samples
+initial configurations at random and uses smoothed density estimates from the
+best and worst observed trials to choose promising combinations. TPE is a
+Bayesian optimization approach, not a Gaussian-process surrogate.
+
+Copy `configs/bayesian.example.json`, adjust `engine.path` and the options
+you want to tune, then run:
+
+~~~powershell
+tunex -c configs/bayesian.example.json bayesian
+tunex -c configs/bayesian.example.json bayesian --iterations 150
+~~~
+
+The `bayesian` section contains `iterations`, `games_per_trial` (even),
+`startup_trials`, `candidates` (proposal pool size), `gamma` (fraction
+of strongest observations), `prior_weight` (noise shrinkage toward 50%),
+`seed`, `state_file`, and integer `parameters` with `name`, `value`,
+`min`, `max`, `step`. The existing `baseline.options` are the fixed
+control settings. TuneX tests each proposed candidate against the **same
+baseline executable and options**, using paired team/color swaps and the
+existing match runner. The first trial uses the supplied starting values.
+
+A completed trial is recorded with its exact parameter vector, W/D/L, and
+score. Random state, all observations, and the best observed options are
+saved atomically so a subsequent command resumes deterministically. A resume
+with incompatible time controls, baseline, parameter ranges, seed or engine
+path is rejected to avoid mixing unrelated experiments. Do not run multiple
+tuners against one state file at the same time.
+
+This is an optimizer, **not a guarantee of Elo gains**. With small per-trial
+game budgets, even a model-guided tuner can select lucky configurations.
+Independently verify the reported best settings against an untouched baseline
+using SPRT and fresh openings. The current optimizer supports integer-valued
+spin options; boolean switches are best evaluated separately. It works with
+IronPhoenix and SpellWarden by selecting the corresponding `variant` and
+using parameters actually advertised by that engine.
+
 ## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/clipboard-list.svg" alt="" width="20" height="20"> Requirements
 
 - Python **3.11+**
