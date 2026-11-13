@@ -297,7 +297,7 @@ def _play_game(
     cancel_event: threading.Event | None = None,
     on_progress: Callable[[GameSpec, str, int], None] | None = None,
 ) -> GameRecord:
-    if config.variant == "spell_chess":
+    if getattr(config, "variant", "four_player_teams") == "spell_chess":
         return _play_spell_game(config, spec, baseline, candidate,
                                 cancel_event, on_progress)
     if on_progress is not None:
@@ -423,7 +423,7 @@ def _play_game(
 class MatchRunner:
     def __init__(self, config: Config) -> None:
         self.config = config
-        self.openings = _load_openings(config.match.openings_file, config.variant)
+        self.openings = _load_openings(config.match.openings_file, getattr(config, "variant", "four_player_teams"))
         self.cancel_event = threading.Event()
 
     def _specs(self, games: int, offset: int = 0) -> list[GameSpec]:
