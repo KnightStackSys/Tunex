@@ -27,7 +27,7 @@ Tunex currently targets IronPhoenix's 4PC UCI behavior, including its immediate 
 
 <a id="-requirements"></a>
 
-## SpellWarden (8×8 Spell Chess) support
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/wand-sparkles.svg" alt="" width="20" height="20"> SpellWarden (8×8 Spell Chess) support
 
 TuneX supports two match variants; existing IronPhoenix configs default to
 `"variant": "four_player_teams"`. SpellWarden configs use
