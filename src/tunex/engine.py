@@ -220,6 +220,33 @@ class UciEngine:
                     info_line=last_info,
                 )
 
+    def static_eval_cp(self, fen: str) -> int:
+        """Read the engine's *static*, side-to-move evaluation (not a search score).
+
+        IronPhoenix and SpellWarden use 'info string eval cp N' in response
+        to 'eval'. Reject missing or malformed responses, including bad FENs.
+        """
+        self.send(f"position fen {fen}")
+        self.send("eval")
+        self.send("isready")
+        lines = self._read_until(lambda line: line == "readyok", self.startup_timeout)
+        for line in lines:
+            if line.startswith("info string ") and any(term in line.lower() for term in (
+                "invalid", "illegal", "error", "failed", "requires", "refused",
+            )):
+                raise EngineError(f"{self.name}: {line}")
+        scores = [
+            re.fullmatch(r"info string eval cp (-?\d+)", line)
+            for line in lines
+            if line.startswith("info string eval cp ")
+        ]
+        if len(scores) != 1 or scores[0] is None:
+            raise EngineError(
+                f"{self.name} must support 'eval' -> 'info string eval cp N' "
+                "for Texel tuning"
+            )
+        return int(scores[0].group(1))
+
     def opening_position(self, position_command: str) -> tuple[str, tuple[str, ...]]:
         """Get native FEN4 + legal UCI moves for SAN opening conversion.
 
