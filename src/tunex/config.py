@@ -224,9 +224,9 @@ class Config:
             engine.path = str((config_path.parent / engine.path).resolve())
         baseline = VariantConfig.from_dict(data.get("baseline", {}), "baseline")
         candidate = VariantConfig.from_dict(data.get("candidate", {}), "candidate")
-        for variant in (baseline, candidate):
-            if variant.path is not None and not Path(variant.path).is_absolute():
-                variant.path = str((config_path.parent / variant.path).resolve())
+        for engine_variant in (baseline, candidate):
+            if engine_variant.path is not None and not Path(engine_variant.path).is_absolute():
+                engine_variant.path = str((config_path.parent / engine_variant.path).resolve())
         return cls(
             engine=engine,
             search=SearchConfig.from_dict(data.get("search")),
