@@ -11,6 +11,7 @@ from .engine import EngineError, UciEngine
 from .match import GameRecord, GameSpec, MatchRunner
 from .sprt import SprtState
 from .spsa import SpsaRunner
+from .texel import TexelRunner
 from .stats import WDL, format_summary
 
 
@@ -178,6 +179,15 @@ def command_bayesian(config: Config, iterations: int | None) -> int:
     return 0
 
 
+def command_texel(config: Config, epochs: int | None) -> int:
+    runner = TexelRunner(config)
+    runner.run(epochs)
+    print("best validation HCE weights (verify in independent matches):")
+    for name, value in runner.best_weights.items():
+        print(f"  {name} = {value}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tunex",
@@ -204,6 +214,9 @@ def build_parser() -> argparse.ArgumentParser:
     bayesian = sub.add_parser("bayesian", help="run resumable Bayesian TPE tuning")
     bayesian.add_argument("--iterations", type=int, default=None)
 
+    texel = sub.add_parser("texel", help="fit HCE weights to labeled positions")
+    texel.add_argument("--epochs", type=int, default=None)
+
     return parser
 
 
@@ -223,6 +236,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_spsa(config, args.iterations)
         if args.command == "bayesian":
             return command_bayesian(config, args.iterations)
+        if args.command == "texel":
+            return command_texel(config, args.epochs)
     except KeyboardInterrupt:
         print("\nTunex interrupted; active engine processes stopped.", file=sys.stderr)
         return 130

@@ -252,6 +252,47 @@ class BayesianConfig:
 
 
 @dataclass(slots=True)
+class TexelConfig:
+    """Labeled-position Texel fitting via bounded integer coordinate descent."""
+
+    dataset: str
+    parameters: list[SpsaParameter]
+    epochs: int = 5
+    k: float = 1.0
+    validation_fraction: float = 0.2
+    seed: int = 20261113
+    state_file: str = "results/texel_state.json"
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "TexelConfig":
+        params = [SpsaParameter.from_dict(p) for p in data.get("parameters", [])]
+        cfg = cls(
+            dataset=str(data.get("dataset", "")),
+            parameters=params,
+            epochs=int(data.get("epochs", 5)),
+            k=float(data.get("k", 1.0)),
+            validation_fraction=float(data.get("validation_fraction", 0.2)),
+            seed=int(data.get("seed", 20261113)),
+            state_file=str(data.get("state_file", "results/texel_state.json")),
+        )
+        if not cfg.dataset.strip() or not params:
+            raise ValueError("texel dataset and parameters are required")
+        if cfg.epochs < 1 or not 0 < cfg.k <= 10:
+            raise ValueError("texel epochs must be positive and k in (0, 10]")
+        if not 0 < cfg.validation_fraction < 0.5:
+            raise ValueError("texel validation_fraction must be in (0, 0.5)")
+        if len({p.name for p in params}) != len(params):
+            raise ValueError("texel parameter names must be unique")
+        for p in params:
+            if any(abs(v - round(v)) > 1e-9 for v in
+                   (p.minimum, p.maximum, p.value, p.step)):
+                raise ValueError(f"{p.name}: texel requires integer-valued parameters")
+            if p.minimum == p.maximum or p.step < 1:
+                raise ValueError(f"{p.name}: texel bounds must vary with step >= 1")
+        return cfg
+
+
+@dataclass(slots=True)
 class Config:
     engine: EngineConfig
     search: SearchConfig
@@ -261,6 +302,7 @@ class Config:
     sprt: SprtConfig
     spsa: SpsaConfig | None = None
     bayesian: BayesianConfig | None = None
+    texel: TexelConfig | None = None
     variant: str = "four_player_teams"
 
     @classmethod
@@ -270,6 +312,10 @@ class Config:
         variant = str(data.get("variant", "four_player_teams")).lower()
         if variant not in {"four_player_teams", "spell_chess"}:
             raise ValueError("variant must be four_player_teams or spell_chess")
+        if "texel" in data and data["texel"].get("dataset"):
+            dataset = Path(data["texel"]["dataset"])
+            if not dataset.is_absolute():
+                data["texel"]["dataset"] = str((config_path.parent / dataset).resolve())
         engine = EngineConfig.from_dict(data.get("engine", {}))
         match = MatchConfig.from_dict(data.get("match"))
         openings = match.openings_file
@@ -292,5 +338,6 @@ class Config:
             spsa=SpsaConfig.from_dict(data["spsa"]) if "spsa" in data else None,
             bayesian=BayesianConfig.from_dict(data["bayesian"])
             if "bayesian" in data else None,
+            texel=TexelConfig.from_dict(data["texel"]) if "texel" in data else None,
             variant=variant,
         )

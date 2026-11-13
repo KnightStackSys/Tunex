@@ -1,0 +1,73 @@
+{
+  "variant": "four_player_teams",
+  "engine": {
+    "path": "C:/path/to/IronPhoenix/out/build/x64-release/ironphoenix.exe",
+    "startup_timeout": 15,
+    "move_timeout": 60,
+    "strict_options": true,
+    "common_options": {
+      "Hash": 64,
+      "MultiPV": 1,
+      "UseNNUE": false
+    }
+  },
+  "search": {
+    "mode": "movetime",
+    "value": 250
+  },
+  "match": {
+    "games": 100,
+    "workers": 4,
+    "max_plies": 320,
+    "paired": true,
+    "seed": 20261113,
+    "openings_file": null,
+    "results_file": "results/games.jsonl"
+  },
+  "baseline": {
+    "name": "Fixed HCE context",
+    "options": {}
+  },
+  "candidate": {
+    "name": "Texel candidate",
+    "options": {}
+  },
+  "texel": {
+    "dataset": "texel_positions.example.jsonl",
+    "epochs": 8,
+    "k": 1,
+    "validation_fraction": 0.2,
+    "seed": 20261113,
+    "state_file": "results/texel_state.json",
+    "parameters": [
+      {
+        "name": "EvalKnightMobility",
+        "value": 9,
+        "min": 0,
+        "max": 24,
+        "step": 1
+      },
+      {
+        "name": "EvalBishopPairBonus",
+        "value": 62,
+        "min": 20,
+        "max": 100,
+        "step": 2
+      },
+      {
+        "name": "EvalKingZoneAttackPenalty",
+        "value": 77,
+        "min": 30,
+        "max": 140,
+        "step": 3
+      },
+      {
+        "name": "EvalKnightOutpostBonus",
+        "value": 14,
+        "min": 0,
+        "max": 40,
+        "step": 2
+      }
+    ]
+  }
+}

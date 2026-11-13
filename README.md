@@ -109,6 +109,58 @@ spin options; boolean switches are best evaluated separately. It works with
 IronPhoenix and SpellWarden by selecting the corresponding `variant` and
 using parameters actually advertised by that engine.
 
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/target.svg" alt="" width="20" height="20"> Texel tuning (HCE)
+
+Texel tuning fits **handcrafted evaluation parameters to positions with known
+game outcomes**, rather than spending games on every candidate weight vector.
+TuneX uses a logistic outcome prediction from the engine's **static** evaluation
+and minimizes mean squared prediction error with a bounded integer coordinate
+descent. This is a slow but dependency-free black-box Texel-loss optimizer;
+it is **not** the analytical-gradient variant.
+
+**Requires:** an IronPhoenix build with the companion `eval` UCI command
+returning `info string eval cp N` (a *side-to-move team* score). TuneX turns
+this into **Red+Yellow team perspective** before fitting. Use handcrafted
+evaluation (`UseNNUE=false`); weight tuning must not accidentally fit NNUE
+output. SpellWarden currently has no runtime `Eval*` UCI options, so Texel
+HCE tuning is intentionally unsupported there until the evaluator exposes them.
+
+Create a JSONL dataset, one object per line:
+
+~~~json
+{"fen":"<native IronPhoenix FEN4>","result":1.0,"game_id":"match-001"}
+{"fen":"<native IronPhoenix FEN4>","result":0.0,"game_id":"match-002"}
+{"fen":"<native IronPhoenix FEN4>","result":0.5,"game_id":"match-003"}
+~~~
+
+`result` is **1 for Red+Yellow winning, 0 for Blue+Green winning,
+0.5 for draw**, regardless of the FEN's side to move. `game_id` is required
+to partition entire games into disjoint training and validation sets, preventing
+later positions from the same game appearing in both splits. Only use completed,
+reliable game outcomes. Do not treat the engine's current scores as labels.
+Prefer many varied, nonterminal positions and a representative held-out dataset.
+`fen` must be a native FEN4 snapshot (not just `4PC`).
+
+Copy `configs/texel.example.json`, set `engine.path`, provide a real
+`configs/texel_positions.example.jsonl` file with your labeled positions,
+then run:
+
+~~~powershell
+tunex -c configs/texel.example.json texel
+tunex -c configs/texel.example.json texel --epochs 12
+~~~
+
+The `texel` section configures `dataset`, `epochs`, logistic scaling `k`,
+`validation_fraction`, `seed`, `state_file`, and integer `parameters`
+with `name`, `value`, `min`, `max`, `step`. Each epoch considers
+neighbouring integer values per weight, accepting changes that reduce training
+loss. TuneX saves current weights and the weights with **lowest validation
+loss**, and resumes from a compatible state file. It rejects incompatible
+configurations, datasets, and malformed labels.
+
+Texel loss is not Elo: compare the selected HCE weights against the original
+settings in fresh **paired SPRT matches** before changing production defaults.
+
 ## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/clipboard-list.svg" alt="" width="20" height="20"> Requirements
 
 - Python **3.11+**
