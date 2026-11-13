@@ -5,6 +5,7 @@ from dataclasses import dataclass, asdict
 import json
 from pathlib import Path
 import random
+import re
 import threading
 from typing import Any, Callable
 
@@ -60,7 +61,7 @@ def _is_bare_fen4(line: str) -> bool:
             or (len(line) >= 2 and line[0].upper() in COLORS and line[1] == "-"))
 
 
-def _load_openings(path: str | None) -> list[tuple[str | None, tuple[str, ...]]]:
+def _load_openings(path: str | None, variant: str = "four_player_teams") -> list[tuple[str | None, tuple[str, ...]]]:
     if not path:
         return [(None, ())]
     openings: list[tuple[str | None, tuple[str, ...]]] = []
@@ -75,7 +76,9 @@ def _load_openings(path: str | None) -> list[tuple[str | None, tuple[str, ...]]]
         fen_text = None
         if line[:4].lower() == "fen ":
             fen_text = line[4:].strip()
-        elif _is_bare_fen4(line):
+        elif variant == "four_player_teams" and _is_bare_fen4(line):
+            fen_text = line
+        elif variant == "spell_chess" and "/" in line.split()[0]:
             fen_text = line
 
         if fen_text is not None:
@@ -138,6 +141,145 @@ def _convert_opening(engine: UciEngine, start_fen: str | None,
     return result
 
 
+_SPELL_TURN_RE = re.compile(
+    r"(?:(?:freeze|jump)@[a-h][1-8]:)?[a-h][1-8][a-h][1-8][qrbn]?$"
+)
+
+
+def _spell_winner(fen: str) -> int | None:
+    # The board is the first field; SpellWarden's extended spell metadata
+    # is separate and must not be interpreted as a chess position.
+    board = fen.split()[0]
+    if "k" not in board:
+        return 0
+    if "K" not in board:
+        return 1
+    return None
+
+
+def _spell_start_side(start_fen: str | None) -> int:
+    if not start_fen:
+        return 0
+    parts = start_fen.split()
+    if len(parts) < 6 or parts[1] not in ("w", "b"):
+        raise ValueError("Spell Chess openings require six-field FEN (optional sw= field)")
+    return int(parts[1] == "b")
+
+
+def _spell_opening(engine: UciEngine, start_fen: str | None,
+                   opening_moves: tuple[str, ...]) -> list[str]:
+    moves: list[str] = []
+    for ply, move in enumerate(opening_moves, 1):
+        if not _SPELL_TURN_RE.fullmatch(move):
+            raise EngineError(
+                f"Spell Chess opening ply {ply}: expected coordinate or "
+                f"freeze@/jump@ spell turn, got {move!r}; SAN is not supported"
+            )
+        position = _position_command(start_fen, moves)
+        legal = engine.spell_legal_turns(position)
+        if move not in legal:
+            raise EngineError(f"Spell Chess opening ply {ply}: illegal turn {move!r}")
+        moves.append(move)
+    return moves
+
+
+def _play_spell_game(
+    config: Config, spec: GameSpec, baseline: VariantConfig, candidate: VariantConfig,
+    cancel_event: threading.Event | None = None,
+    on_progress: Callable[[GameSpec, str, int], None] | None = None,
+) -> GameRecord:
+    if on_progress is not None:
+        on_progress(spec, "starting", 0)
+    candidate_options = _merged_options(config.engine.common_options, candidate)
+    baseline_options = _merged_options(config.engine.common_options, baseline)
+    engines = {
+        spec.candidate_team: UciEngine(
+            candidate.path or config.engine.path, name=candidate.name,
+            startup_timeout=config.engine.startup_timeout,
+            move_timeout=config.engine.move_timeout,
+            strict_options=config.engine.strict_options, cancel_event=cancel_event,
+        ),
+        1 - spec.candidate_team: UciEngine(
+            baseline.path or config.engine.path, name=baseline.name,
+            startup_timeout=config.engine.startup_timeout,
+            move_timeout=config.engine.move_timeout,
+            strict_options=config.engine.strict_options, cancel_event=cancel_event,
+        ),
+    }
+    moves: list[str] = []
+    last_result: SearchResult | None = None
+    try:
+        for engine in engines.values():
+            engine.start()
+        engines[spec.candidate_team].configure(candidate_options)
+        engines[1 - spec.candidate_team].configure(baseline_options)
+        for engine in engines.values():
+            engine.new_game()
+        moves = _spell_opening(
+            engines[spec.candidate_team], spec.start_fen, spec.opening_moves
+        )
+        opening_uci = list(moves)
+        initial_side = _spell_start_side(spec.start_fen)
+        if on_progress is not None:
+            on_progress(spec, "playing", len(moves))
+
+        def result_record(winner: int | None, reason: str) -> GameRecord:
+            return GameRecord(
+                game_id=spec.game_id, candidate_team=spec.candidate_team,
+                result=_candidate_result(winner, spec.candidate_team),
+                winner_team=winner, reason=reason, plies=len(moves),
+                moves=list(moves), opening_moves=list(opening_uci),
+                start_fen=spec.start_fen,
+                last_score_cp=last_result.score_cp if last_result else None,
+                last_score_mate=last_result.score_mate if last_result else None,
+            )
+
+        for _ in range(config.match.max_plies):
+            if cancel_event is not None and cancel_event.is_set():
+                raise EngineError("match interrupted")
+            side = (initial_side + len(moves)) % 2
+            engine = engines[side]
+            position = _position_command(spec.start_fen, moves)
+
+            # A custom opening may itself be terminal.
+            if last_result is None and moves:
+                fen, _ = engine.spell_status(position)
+                winner = _spell_winner(fen)
+                if winner is not None:
+                    return result_record(winner, "terminal-king-capture")
+
+            last_result = engine.search(position, config.search.go_command())
+            if last_result.bestmove == "0000":
+                fen, in_check = engine.spell_status(position)
+                winner = _spell_winner(fen)
+                if winner is not None:
+                    return result_record(winner, "terminal-king-capture")
+                return result_record(1 - side if in_check else None,
+                                     "checkmate/no-legal-move" if in_check
+                                     else "stalemate/no-legal-move")
+
+            if not _SPELL_TURN_RE.fullmatch(last_result.bestmove):
+                raise EngineError(
+                    f"{engine.name} returned malformed Spell Chess turn "
+                    f"{last_result.bestmove!r}"
+                )
+            moves.append(last_result.bestmove)
+            # Terminal king captures are not guaranteed to have a mate 1
+            # score, and cannot be adjudicated with 4PC team heuristics.
+            after = _position_command(spec.start_fen, moves)
+            fen, _ = engine.spell_status(after)
+            winner = _spell_winner(fen)
+            if winner is not None:
+                return result_record(winner, "terminal-king-capture")
+            if on_progress is not None and len(moves) % 16 == 0:
+                on_progress(spec, "playing", len(moves))
+
+        return result_record(None, "max-plies")
+    finally:
+        for engine in engines.values():
+            engine.close()
+
+
 def _candidate_result(winner_team: int | None, candidate_team: int) -> float:
     if winner_team is None:
         return 0.5
@@ -155,6 +297,9 @@ def _play_game(
     cancel_event: threading.Event | None = None,
     on_progress: Callable[[GameSpec, str, int], None] | None = None,
 ) -> GameRecord:
+    if config.variant == "spell_chess":
+        return _play_spell_game(config, spec, baseline, candidate,
+                                cancel_event, on_progress)
     if on_progress is not None:
         on_progress(spec, "starting", 0)
     if cancel_event is not None and cancel_event.is_set():
@@ -278,7 +423,7 @@ def _play_game(
 class MatchRunner:
     def __init__(self, config: Config) -> None:
         self.config = config
-        self.openings = _load_openings(config.match.openings_file)
+        self.openings = _load_openings(config.match.openings_file, config.variant)
         self.cancel_event = threading.Event()
 
     def _specs(self, games: int, offset: int = 0) -> list[GameSpec]:

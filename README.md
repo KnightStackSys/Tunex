@@ -27,6 +27,42 @@ Tunex currently targets IronPhoenix's 4PC UCI behavior, including its immediate 
 
 <a id="-requirements"></a>
 
+## SpellWarden (8×8 Spell Chess) support
+
+TuneX supports two match variants; existing IronPhoenix configs default to
+`"variant": "four_player_teams"`. SpellWarden configs use
+`"variant": "spell_chess"` and the engine's native 8×8 UCI extension.
+
+Start from `configs/spellwarden.example.json` and update `engine.path`:
+
+~~~powershell
+tunex -c configs/spellwarden.example.json probe
+tunex -c configs/spellwarden.example.json match --games 20
+tunex -c configs/spellwarden.example.json sprt
+tunex -c configs/spellwarden.example.json spsa
+~~~
+
+The match runner alternates **White and Black**, swapping candidate and
+baseline colors in paired games. Complete spell turns are single tokens:
+`freeze@d5:e2e4`, `jump@d4:d1d8`, or a normal `e2e4`.
+Openings may contain standard six-field chess FEN with optional SpellWarden
+`sw=...` metadata, or move lists beginning with `moves`.
+Opening turns are validated through the engine's exhaustive `legalmoves`
+command. SAN is not yet supported for Spell Chess.
+
+For accurate checkmate/stalemate adjudication, use SpellWarden with the
+integration update to its `d` diagnostic, which exposes
+`info string check: yes/no` alongside its existing FEN. SpellWarden
+reports its own spell-aware check status; TuneX must not approximate it with
+orthodox chess attack rules. King captures are recognized from the returned
+8×8 board FEN; max-plies are draws. The engine's existing
+`SpellTargets`, `RootSpellTargets`, and `UseMoveOrdering` options can be
+used in matches and SPSA. **There is no automatic Spell Chess rating oracle**:
+test results reflect SpellWarden's current rules implementation.
+
+IronPhoenix four-player behavior, FEN4/SAN4 parsing, team pairing, and all
+existing configs remain unchanged when `variant` is omitted.
+
 ## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/clipboard-list.svg" alt="" width="20" height="20"> Requirements
 
 - Python **3.11+**

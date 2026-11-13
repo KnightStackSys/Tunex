@@ -171,7 +171,7 @@ def command_spsa(config: Config, iterations: int | None) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tunex",
-        description="UCI match testing, SPRT, and SPSA tuning for IronPhoenix.",
+        description="UCI match testing, SPRT, and SPSA tuning for 4PC Teams and Spell Chess.",
     )
     parser.add_argument(
         "-c",

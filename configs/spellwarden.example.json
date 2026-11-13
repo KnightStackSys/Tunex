@@ -1,0 +1,78 @@
+{
+  "variant": "spell_chess",
+  "engine": {
+    "path": "C:/path/to/SpellWarden/out/build/x64-release/spellwarden.exe",
+    "startup_timeout": 15,
+    "move_timeout": 90,
+    "strict_options": true,
+    "common_options": {
+      "Hash": 64,
+      "Threads": 1,
+      "UCI_Variant": "spell"
+    }
+  },
+  "search": {
+    "mode": "movetime",
+    "value": 250
+  },
+  "match": {
+    "games": 100,
+    "workers": 4,
+    "max_plies": 200,
+    "paired": true,
+    "seed": 20261113,
+    "openings_file": null,
+    "results_file": "results/spellwarden_games.jsonl"
+  },
+  "baseline": {
+    "name": "SpellWarden baseline",
+    "options": {
+      "SpellTargets": 6,
+      "RootSpellTargets": 24,
+      "UseMoveOrdering": true
+    }
+  },
+  "candidate": {
+    "name": "SpellWarden candidate",
+    "options": {
+      "SpellTargets": 8,
+      "RootSpellTargets": 24,
+      "UseMoveOrdering": true
+    }
+  },
+  "sprt": {
+    "elo0": 0,
+    "elo1": 5,
+    "alpha": 0.05,
+    "beta": 0.05,
+    "max_games": 10000,
+    "batch_games": 20
+  },
+  "spsa": {
+    "iterations": 200,
+    "games_per_iteration": 40,
+    "a": 50.0,
+    "c": 4.0,
+    "alpha": 0.602,
+    "gamma": 0.101,
+    "A": 20,
+    "seed": 20261113,
+    "state_file": "results/spellwarden_spsa_state.json",
+    "parameters": [
+      {
+        "name": "SpellTargets",
+        "value": 6,
+        "min": 2,
+        "max": 16,
+        "step": 1
+      },
+      {
+        "name": "RootSpellTargets",
+        "value": 24,
+        "min": 8,
+        "max": 48,
+        "step": 1
+      }
+    ]
+  }
+}
