@@ -1,5 +1,7 @@
 <a id="-tunex"></a>
 
+<div align="center">
+
 # <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/settings.svg" alt="" width="20" height="20"> Tunex
 
 <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/crown.svg" alt="" width="20" height="20"> **UCI tuning and strength testing for IronPhoenix 4-player chess.**
@@ -7,6 +9,10 @@
 **Tunex** is a lightweight Python tuning and strength-testing harness built for [IronPhoenix](https://github.com/KnightStackSys/IronPhoenix), a 4-player chess Teams engine.
 
 It keeps chess computation inside the C++ engine and uses Python for the parts that benefit from rapid iteration: launching engine processes, applying UCI parameters, paired match testing, Elo statistics, SPRT, SPSA, experiment logs, and resumable tuning state.
+
+</div>
+
+---
 
 <a id="-what-it-supports"></a>
 
