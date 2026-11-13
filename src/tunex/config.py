@@ -198,6 +198,60 @@ class SpsaConfig:
 
 
 @dataclass(slots=True)
+class BayesianConfig:
+    """Sequential TPE-style Bayesian optimization of integer UCI options."""
+
+    iterations: int = 100
+    games_per_trial: int = 40
+    startup_trials: int = 12
+    candidates: int = 64
+    gamma: float = 0.25
+    prior_weight: float = 4.0
+    seed: int = 20261113
+    state_file: str = "results/bayesian_state.json"
+    parameters: list[SpsaParameter] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "BayesianConfig":
+        cfg = cls(
+            iterations=int(data.get("iterations", 100)),
+            games_per_trial=int(data.get("games_per_trial", 40)),
+            startup_trials=int(data.get("startup_trials", 12)),
+            candidates=int(data.get("candidates", 64)),
+            gamma=float(data.get("gamma", 0.25)),
+            prior_weight=float(data.get("prior_weight", 4.0)),
+            seed=int(data.get("seed", 20261113)),
+            state_file=str(data.get("state_file", "results/bayesian_state.json")),
+            parameters=[SpsaParameter.from_dict(p) for p in data.get("parameters", [])],
+        )
+        if cfg.iterations <= 0 or cfg.games_per_trial <= 0:
+            raise ValueError("bayesian iterations and games_per_trial must be positive")
+        if cfg.games_per_trial % 2:
+            raise ValueError("bayesian games_per_trial must be even for paired testing")
+        if cfg.startup_trials < 2 or cfg.candidates <= 0:
+            raise ValueError("bayesian startup_trials must be >= 2 and candidates > 0")
+        if not 0 < cfg.gamma <= 0.5:
+            raise ValueError("bayesian gamma must be in (0, 0.5]")
+        if cfg.prior_weight < 0:
+            raise ValueError("bayesian prior_weight must be >= 0")
+        if not cfg.state_file.strip():
+            raise ValueError("bayesian state_file cannot be empty")
+        if not cfg.parameters:
+            raise ValueError("bayesian parameters must not be empty")
+        if len({p.name for p in cfg.parameters}) != len(cfg.parameters):
+            raise ValueError("bayesian parameter names must be unique")
+        for p in cfg.parameters:
+            if p.minimum == p.maximum:
+                raise ValueError(f"{p.name}: Bayesian bounds must allow variation")
+            if any(abs(x - round(x)) > 1e-9 for x in
+                   (p.minimum, p.maximum, p.value, p.step)):
+                raise ValueError(f"{p.name}: Bayesian parameters must be integer-valued")
+            if p.step < 1:
+                raise ValueError(f"{p.name}: Bayesian step must be >= 1")
+        return cfg
+
+
+@dataclass(slots=True)
 class Config:
     engine: EngineConfig
     search: SearchConfig
@@ -206,6 +260,7 @@ class Config:
     candidate: VariantConfig
     sprt: SprtConfig
     spsa: SpsaConfig | None = None
+    bayesian: BayesianConfig | None = None
     variant: str = "four_player_teams"
 
     @classmethod
@@ -235,5 +290,7 @@ class Config:
             candidate=candidate,
             sprt=SprtConfig.from_dict(data.get("sprt")),
             spsa=SpsaConfig.from_dict(data["spsa"]) if "spsa" in data else None,
+            bayesian=BayesianConfig.from_dict(data["bayesian"])
+            if "bayesian" in data else None,
             variant=variant,
         )

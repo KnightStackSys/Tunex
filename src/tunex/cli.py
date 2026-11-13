@@ -5,6 +5,7 @@ import json
 import sys
 import threading
 
+from .bayesian import BayesianRunner
 from .config import Config
 from .engine import EngineError, UciEngine
 from .match import GameRecord, GameSpec, MatchRunner
@@ -168,6 +169,15 @@ def command_spsa(config: Config, iterations: int | None) -> int:
     return 0
 
 
+def command_bayesian(config: Config, iterations: int | None) -> int:
+    runner = BayesianRunner(config)
+    runner.run(iterations)
+    print("best observed Bayesian options (validate with SPRT):")
+    for name, value in runner.best_options().items():
+        print(f"  {name} = {value}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tunex",
@@ -191,6 +201,9 @@ def build_parser() -> argparse.ArgumentParser:
     spsa = sub.add_parser("spsa", help="run SPSA parameter tuning")
     spsa.add_argument("--iterations", type=int, default=None)
 
+    bayesian = sub.add_parser("bayesian", help="run resumable Bayesian TPE tuning")
+    bayesian.add_argument("--iterations", type=int, default=None)
+
     return parser
 
 
@@ -208,6 +221,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_sprt(config)
         if args.command == "spsa":
             return command_spsa(config, args.iterations)
+        if args.command == "bayesian":
+            return command_bayesian(config, args.iterations)
     except KeyboardInterrupt:
         print("\nTunex interrupted; active engine processes stopped.", file=sys.stderr)
         return 130

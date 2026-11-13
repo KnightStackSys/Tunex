@@ -1,0 +1,72 @@
+{
+  "variant": "four_player_teams",
+  "engine": {
+    "path": "C:/path/to/IronPhoenix/out/build/x64-release/ironphoenix.exe",
+    "startup_timeout": 10,
+    "move_timeout": 60,
+    "strict_options": true,
+    "common_options": {
+      "Hash": 64,
+      "MultiPV": 1,
+      "UseNNUE": false
+    }
+  },
+  "search": {
+    "mode": "movetime",
+    "value": 250
+  },
+  "match": {
+    "games": 100,
+    "workers": 4,
+    "max_plies": 320,
+    "paired": true,
+    "seed": 20261113,
+    "openings_file": null,
+    "results_file": "results/bayesian_games.jsonl"
+  },
+  "baseline": {
+    "name": "Fixed IronPhoenix baseline",
+    "options": {
+      "SearchLMRBaseX100": 79,
+      "SearchLMRDivisorX100": 300,
+      "SearchSEEPruneMargin": 87
+    }
+  },
+  "candidate": {
+    "name": "Bayesian candidate",
+    "options": {}
+  },
+  "bayesian": {
+    "iterations": 100,
+    "games_per_trial": 40,
+    "startup_trials": 12,
+    "candidates": 64,
+    "gamma": 0.25,
+    "prior_weight": 4,
+    "seed": 20261113,
+    "state_file": "results/ironphoenix_bayesian_state.json",
+    "parameters": [
+      {
+        "name": "SearchLMRBaseX100",
+        "value": 79,
+        "min": 50,
+        "max": 120,
+        "step": 2
+      },
+      {
+        "name": "SearchLMRDivisorX100",
+        "value": 300,
+        "min": 220,
+        "max": 420,
+        "step": 5
+      },
+      {
+        "name": "SearchSEEPruneMargin",
+        "value": 87,
+        "min": 40,
+        "max": 160,
+        "step": 5
+      }
+    ]
+  }
+}
