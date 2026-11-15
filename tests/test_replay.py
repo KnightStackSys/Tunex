@@ -78,7 +78,9 @@ def test_replay_forces_pgn_and_only_searches_selected_team(tmp_path: Path):
     }))
     config = Config.load(config_path)
     game_file = tmp_path / "game.txt"
-    # The fake engine exposes legal coordinate moves but not a complete FEN4\n    # board, so use UCI here; PGN4 parsing is covered by the test above.\n    game_file.write_text("1. h2h3 .. b9c9 .. g13g12 .. m8l8")
+    # The fake engine exposes legal coordinate moves but not a complete FEN4
+    # board, so use UCI here; PGN4 parsing is covered by the test above.
+    game_file.write_text("1. h2h3 .. b9c9 .. g13g12 .. m8l8")
     output = tmp_path / "report.json"
     FakeEngine.instances.clear()
     with patch("tunex.replay.UciEngine", FakeEngine):
