@@ -158,6 +158,11 @@ class UciEngine:
         self._read_until(lambda line: line == "readyok", self.startup_timeout)
 
     def set_option(self, name: str, value: Any) -> None:
+        # Engines without a UseNNUE option are HCE-only. Do not send an
+        # unsupported setoption command when NNUE was explicitly disabled.
+        # Asking to ENABLE NNUE must still fail under strict validation.
+        if name == "UseNNUE" and "UseNNUE" not in self.options and value is False:
+            return
         if self.strict_options and self.options and name not in self.options:
             raise EngineError(f"{self.name} does not advertise UCI option {name!r}")
         if value is None:
