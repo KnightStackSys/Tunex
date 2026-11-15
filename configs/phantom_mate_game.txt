@@ -1,0 +1,8 @@
+# Four-player Teams game: Red Blue Yellow Green
+1. h2-h3 .. b9-c9 .. g13-g12 .. m8-l8
+2. Qg1-j4 .. b7-c7 .. Qh14-g13 .. m6-l6
+3. k2-k4 .. Na10-c11 .. Ne14-f12 .. Qn7-l9
+4. Nj1-i3 .. Qa8-b9 .. Nj14-i12 .. Ql9-g9
+5. Bi1-h2 .. Na5-c6 .. Kg14-h14 .. Nn10-m8
+6. Qj4-j7 .. Qb9-f5 .. Ni12-k11 .. Kn8-n7
+7. d2-d4 .. Qf5xf2 .. Nk11-j9 .. Qg9xg2+

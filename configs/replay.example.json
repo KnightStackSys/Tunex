@@ -1,0 +1,30 @@
+{
+  "variant": "four_player_teams",
+  "engine": {
+    "path": "C:/path/to/IronPhoenix/out/build/x64-release/ironphoenix.exe",
+    "startup_timeout": 10,
+    "move_timeout": 120,
+    "strict_options": true,
+    "common_options": {
+      "Hash": 64,
+      "MultiPV": 1,
+      "Threads": 1,
+      "UseNNUE": false
+    }
+  },
+  "search": {
+    "mode": "depth",
+    "value": 22
+  },
+  "match": {
+    "games": 2,
+    "paired": true
+  },
+  "baseline": {
+    "name": "unused"
+  },
+  "candidate": {
+    "name": "IronPhoenix PGN replay",
+    "options": {}
+  }
+}

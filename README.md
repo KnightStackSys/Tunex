@@ -161,6 +161,46 @@ configurations, datasets, and malformed labels.
 Texel loss is not Elo: compare the selected HCE weights against the original
 settings in fresh **paired SPRT matches** before changing production defaults.
 
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/scan-search.svg" alt="" width="20" height="20"> Replay a PGN4 game against your engine
+
+The `replay` command follows a single recorded four-player Teams game from a
+UTF-8 `.txt` file (e.g. `configs/phantom_mate_game.txt`), with the usual
+**Red, Blue, Yellow, Green** move order. Both coordinate and long-algebraic
+PGN4/SAN notation are accepted, including `Qg9xg2+` and move numbers.
+
+Select which *team* IronPhoenix controls:
+
+~~~powershell
+tunex -c configs/replay.example.json replay --file phantom_mate_game.txt --team BG --report results/phantom_mate_bg.json
+tunex -c configs/replay.example.json replay --file phantom_mate_game.txt --team RY
+~~~
+
+File and optional JSON report paths are resolved relative to the **config file
+directory**. Update `engine.path` in `configs/replay.example.json` first.
+The example uses `go depth 22`, `Threads=1`, and `UseNNUE=false`; adjust
+`search` and `engine.common_options` as required to reproduce an issue.
+
+- `RY`: Tunex searches Red and Yellow turns; Blue and Green play the PGN move.
+- `BG`: Tunex searches Blue and Green turns; Red and Yellow play the PGN move.
+- For engine-controlled turns, the **bestmove** is compared to the PGN move,
+  and the output shows `MATCH` or `DIFFERENT`, plus the engine's score.
+- **Regardless of match or mismatch**, the recorded PGN move is applied.
+  This keeps the replay on the original game line, never on an engine deviation.
+- Only **one** engine process is started and `ucinewgame` is sent **once**.
+  This preserves its history and transposition table across subsequent
+  *engine-controlled searches* (while other turns are forced from the PGN).
+- Every recorded move is checked against IronPhoenix's native legal moves.
+  The command stops with a ply-specific error on invalid or ambiguous notation.
+- The optional report contains all compared plies, the selected engine moves,
+  centipawn or mate scores, and match/mismatch counts.
+
+**Reproduction caveat:** forcing the other team's moves does not recreate
+search work originally performed by a separate opponent engine, and recorded
+moves for the selected team are not searched when the engine's turn is skipped.
+A game originally played with different threading or search limits may still
+produce different scores. This tool is a replay/debugging aid, not a statistical
+strength test.
+
 ## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/clipboard-list.svg" alt="" width="20" height="20"> Requirements
 
 - Python **3.11+**

@@ -11,6 +11,7 @@ from .engine import EngineError, UciEngine
 from .match import GameRecord, GameSpec, MatchRunner
 from .sprt import SprtState
 from .spsa import SpsaRunner
+from .replay import replay_game
 from .texel import TexelRunner
 from .stats import WDL, format_summary
 
@@ -188,6 +189,33 @@ def command_texel(config: Config, epochs: int | None) -> int:
     return 0
 
 
+def command_replay(config: Config, file: str, team: str, report: str | None) -> int:
+    from pathlib import Path
+
+    def progress(entry):
+        status = "MATCH" if entry.matched else "DIFFERENT"
+        print(
+            f"[Replay] ply {entry.ply:02d} {entry.seat} | "
+            f"PGN {entry.recorded} ({entry.recorded_uci}) | "
+            f"engine {entry.engine_move} | {status}"
+            + (f" | mate {entry.score_mate}" if entry.score_mate is not None
+               else f" | cp {entry.score_cp}" if entry.score_cp is not None else ""),
+            flush=True,
+        )
+
+    report_data = replay_game(config, Path(file), team, report_file=report,
+                              on_comparison=progress)
+    print(
+        f"[Replay] {report_data.team}: matched {report_data.matched}/"
+        f"{report_data.compared}, different {report_data.mismatched}; "
+        f"forced {report_data.total_plies} recorded plies",
+        flush=True,
+    )
+    if report:
+        print(f"[Replay] JSON report: {report}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tunex",
@@ -205,6 +233,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     match = sub.add_parser("match", help="run a fixed number of candidate-vs-baseline games")
     match.add_argument("--games", type=int, default=None)
+
+    replay = sub.add_parser(
+        "replay", help="replay a PGN4 TXT game, search RY or BG, force recorded moves"
+    )
+    replay.add_argument("--file", required=True,
+                        help="game TXT/PGN path, relative to the config directory")
+    replay.add_argument("--team", required=True, choices=["RY", "BG", "ry", "bg"],
+                        help="team controlled by the tested engine")
+    replay.add_argument("--report", default=None,
+                        help="optional JSON comparison output path")
 
     sub.add_parser("sprt", help="run sequential candidate-vs-baseline testing")
 
@@ -225,11 +263,21 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     config = _load(args.config)
 
+    if args.command == "replay":
+        from pathlib import Path
+        config_dir = Path(args.config).resolve().parent
+        for attr in ("file", "report"):
+            value = getattr(args, attr, None)
+            if value and not Path(value).is_absolute():
+                setattr(args, attr, str((config_dir / value).resolve()))
+
     try:
         if args.command == "probe":
             return command_probe(config)
         if args.command == "match":
             return command_match(config, args.games)
+        if args.command == "replay":
+            return command_replay(config, args.file, args.team, args.report)
         if args.command == "sprt":
             return command_sprt(config)
         if args.command == "spsa":
