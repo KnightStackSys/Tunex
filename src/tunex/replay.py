@@ -57,7 +57,7 @@ def parse_game(text: str) -> tuple[str, ...]:
     braces, semicolon-to-EOL comments and PGN tags are ignored; variations
     are rejected to avoid silently replaying a side line.
     """
-    text = re.sub(r"(?m)^\\s*#[^\\n]*", "", text)
+    text = re.sub(r"(?m)^\s*#[^\n]*", "", text)
     text = re.sub(r";[^\n]*", "", text)
     text = re.sub(r"\{[^}]*\}", " ", text, flags=re.S)
     text = re.sub(r"(?m)^\s*\[[^\n]*\]\s*$", "", text)
