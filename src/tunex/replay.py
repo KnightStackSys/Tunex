@@ -63,7 +63,7 @@ def parse_game(text: str) -> tuple[str, ...]:
     if "(" in text or ")" in text:
         raise ValueError("PGN variations are not supported; supply the main line only")
     tokens: list[str] = []
-    for raw in text.replace("..", " .. ").split():
+    for raw in text.split():
         if raw in {"..", "..."} or _NUMBER.fullmatch(raw):
             continue
         token = _NUMBER_PREFIX.sub("", raw)
