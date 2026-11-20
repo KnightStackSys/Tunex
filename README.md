@@ -612,3 +612,58 @@ For HCE tuning, Tunex can already tune the exposed material and mobility UCI wei
 ## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/scale.svg" alt="" width="20" height="20"> License
 
 GPL-3.0-or-later. See `LICENSE`.
+
+
+## XBoard / WinBoard engines (CECP)
+
+Tunex can run **UCI and XBoard engines in the same match or SPRT**, including
+SPSA, CMA-ES and Bayesian tuning that use the match runner. UCI remains the
+default for existing IronPhoenix configurations. Standard chess is selected
+with `"variant": "standard_chess"`; its legal moves and game results are
+checked by python-chess instead of the custom IronPhoenix mate rules.
+
+See [configs/xboard-sprt.example.json](configs/xboard-sprt.example.json)
+for a mixed-protocol SPRT example. To test two XBoard engines, remove the
+`"protocol": "uci"` override from the candidate and replace its executable
+and options.
+
+```json
+{
+  "variant": "standard_chess",
+  "engine": {
+    "path": "C:/Engines/xboard-engine.exe",
+    "protocol": "xboard",
+    "common_options": {},
+    "startup_timeout": 10,
+    "move_timeout": 30
+  },
+  "baseline": {"name": "Old", "path": "C:/Engines/old.exe"},
+  "candidate": {"name": "New", "path": "C:/Engines/new.exe"},
+  "search": {"mode": "movetime", "value": 1000}
+}
+```
+
+- `engine.protocol` is `uci` (default) or `xboard`; each
+  `baseline.protocol` / `candidate.protocol` can override it independently.
+- `engine.arguments` and per-variant `arguments` allow executable arguments.
+  Each is an array of strings, not a shell command.
+- XBoard v2 is negotiated with `xboard` / `protover 2`. Supported features
+  include `ping`, `setboard`, `usermove`, advertised `option` settings,
+  `memory` (for `Hash`) and `smp` (for `Threads`). Older v1 engines
+  can play from the starting position without v2 features.
+- XBoard time control uses `st` **seconds** for Tunex `movetime`
+  **milliseconds** (e.g. `1000` → `st 1`). `depth` uses `sd`.
+  Fractional `st` values (e.g. `st 0.25`) depend on engine support;
+  prefer ≥1000 ms for engines with whole-second-only time controls.
+  Standard CECP does not guarantee a fixed-node search command:
+  `search.mode=nodes` is rejected for XBoard.
+- Coordinate, SAN and standard FEN opening files work in `standard_chess`.
+  For other variants an XBoard engine must explicitly advertise and support
+  the configured `xboard_variant` (set at engine or variant level), plus the
+  variant's move/FEN format. Ordinary XBoard engines do **not** play 4PC Teams
+  or Spell Chess merely by speaking CECP. Custom FEN4 legal-move introspection,
+  SpellWarden commands, PGN4 replay, and Texel static evaluation remain
+  UCI-only.
+- A normal 8x8 game is adjudicated using actual chess rules (including
+  checkmate, stalemate, repetition and the 50-move rule). SPRT and paired
+  results retain the existing W/D/L reporting conventions.

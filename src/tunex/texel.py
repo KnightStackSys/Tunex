@@ -141,6 +141,8 @@ class TexelRunner:
         os.replace(tmp, path)
 
     def run(self, epochs: int | None = None) -> None:
+        if (self.config.baseline.protocol or self.config.engine.protocol) != "uci":
+            raise ValueError("Texel tuning requires UCI-specific static evaluation commands")
         target = self.tune.epochs if epochs is None else epochs
         if target < 1:
             raise ValueError("Texel epochs must be positive")

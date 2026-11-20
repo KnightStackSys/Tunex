@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tunex"
 version = "0.1.0"
-description = "A lightweight UCI tuning harness built for IronPhoenix 4-player chess."
+description = "A UCI and XBoard engine tuning harness for chess variants and standard chess."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "KnightStackSys" }]
-dependencies = ["cma>=4.0,<5"]
+dependencies = ["cma>=4.0,<5", "chess>=1.11,<2"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

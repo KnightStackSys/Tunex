@@ -14,6 +14,7 @@ from .bayesian import BayesianRunner
 from .cmaes import CmaesRunner
 from .config import Config
 from .engine import EngineError, UciEngine
+from .xboard import XBoardEngine
 from .match import GameRecord, GameSpec, MatchRunner
 from .sprt import SprtState
 from .spsa import SpsaRunner
@@ -32,14 +33,23 @@ def _load(path: str) -> Config:
 def command_probe(config: Config) -> int:
     options = dict(config.engine.common_options)
     options.update(config.candidate.options)
-    with UciEngine(
-        config.candidate.path or config.engine.path,
+    protocol = getattr(config.candidate, 'protocol', None) or getattr(config.engine, 'protocol', 'uci')
+    engine_type = UciEngine if protocol == "uci" else XBoardEngine
+    arguments = getattr(config.candidate, 'arguments', None)
+    if arguments is None:
+        arguments = getattr(config.engine, 'arguments', [])
+    kwargs = dict(
         name=config.candidate.name,
         startup_timeout=config.engine.startup_timeout,
         move_timeout=config.engine.move_timeout,
         strict_options=config.engine.strict_options,
-    ) as engine:
-        print(f"engine: {engine.path}")
+    )
+    if arguments:
+        kwargs["arguments"] = arguments
+    if protocol == "xboard":
+        kwargs["variant_name"] = getattr(config.candidate, 'xboard_variant', None) or getattr(config.engine, 'xboard_variant', None)
+    with engine_type(config.candidate.path or config.engine.path, **kwargs) as engine:
+        print(f"engine: {engine.path} ({protocol})")
         print(f"advertised options: {len(engine.options)}")
         engine.configure(options)
         print("configured successfully")
@@ -51,16 +61,17 @@ def command_probe(config: Config) -> int:
             print(line)
     return 0
 
-
 def _game_progress(
-    label: str, lock: threading.Lock, *, show_playing: bool = True
+    label: str, lock: threading.Lock, *, show_playing: bool = True,
+    standard_chess: bool = False,
 ):
     """Progress callback is called on worker threads; serialize console lines."""
     def report(spec: GameSpec, stage: str, plies: int) -> None:
         if stage == "playing" and not show_playing:
             return
         with lock:
-            team = "Red+Yellow" if spec.candidate_team == 0 else "Blue+Green"
+            team = (("White" if spec.candidate_team == 0 else "Black")
+                    if standard_chess else ("Red+Yellow" if spec.candidate_team == 0 else "Blue+Green"))
             if stage == "starting":
                 print(f"[{label}] Game {spec.game_id + 1} starting | candidate {team}",
                       flush=True)
@@ -91,7 +102,8 @@ def command_match(config: Config, games: int | None) -> int:
         f"{config.search.go_command()}", flush=True,
     )
     wdl, records = runner.run(
-        games=games, on_progress=_game_progress("Match", output_lock),
+        games=games, on_progress=_game_progress("Match", output_lock,
+                                   standard_chess=getattr(config, "variant", "four_player_teams") == "standard_chess"),
         on_game_complete=completed,
     )
     print(format_summary(wdl))
@@ -234,7 +246,8 @@ def command_sprt(config: Config, *, fresh: bool = False) -> int:
 
             batch_wdl, _ = runner.run(
                 games=batch, offset=played,
-                on_progress=_game_progress("SPRT", output_lock, show_playing=False),
+                on_progress=_game_progress("SPRT", output_lock, show_playing=False,
+                                           standard_chess=config.variant == "standard_chess"),
                 on_game_complete=completed,
             )
             total.extend(batch_wdl)

@@ -40,8 +40,10 @@ class UciEngine:
         move_timeout: float = 60.0,
         strict_options: bool = True,
         cancel_event: threading.Event | None = None,
+        arguments: list[str] | None = None,
     ) -> None:
         self.path = path
+        self.arguments = list(arguments or [])
         self.name = name
         self.startup_timeout = startup_timeout
         self.move_timeout = move_timeout
@@ -64,7 +66,7 @@ class UciEngine:
             return
         try:
             self.process = subprocess.Popen(
-                [self.path],
+                [self.path, *self.arguments],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -82,16 +84,19 @@ class UciEngine:
                 target=self._reader_loop, args=(self.process.stdout,), daemon=True
             )
             self._reader.start()
-            self.send("uci")
-            lines = self._read_until(lambda line: line == "uciok", self.startup_timeout)
-            for line in lines:
-                match = _OPTION_RE.match(line)
-                if match:
-                    self.options.add(match.group(1))
+            self._handshake()
         except BaseException:
             # Failed startup must never orphan a subprocess or its pipes.
             self.close()
             raise
+
+    def _handshake(self) -> None:
+        self.send("uci")
+        lines = self._read_until(lambda line: line == "uciok", self.startup_timeout)
+        for line in lines:
+            match = _OPTION_RE.match(line)
+            if match:
+                self.options.add(match.group(1))
 
     def _reader_loop(self, stdout) -> None:
         try:
@@ -373,6 +378,9 @@ class UciEngine:
         lines = self._read_until(lambda line: line == "readyok", self.startup_timeout)
         return [line for line in lines if line != "readyok"]
 
+    def _quit_commands(self) -> str:
+        return "stop\nquit\n"
+
     def close(self) -> None:
         proc = self.process
         if proc is None:
@@ -387,7 +395,7 @@ class UciEngine:
                 else:
                     if proc.stdin is not None:
                         with suppress(OSError, ValueError):
-                            proc.stdin.write("stop\nquit\n")
+                            proc.stdin.write(self._quit_commands())
                             proc.stdin.flush()
                     try:
                         proc.wait(timeout=1.0)

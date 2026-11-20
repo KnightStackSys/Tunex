@@ -9,8 +9,11 @@ import re
 import threading
 from typing import Any, Callable
 
+import chess
+
 from .config import Config, VariantConfig
 from .engine import EngineError, SearchResult, UciEngine
+from .xboard import XBoardEngine
 from .notation import coordinate_move, san_to_uci
 from .stats import WDL
 
@@ -78,7 +81,7 @@ def _load_openings(path: str | None, variant: str = "four_player_teams") -> list
             fen_text = line[4:].strip()
         elif variant == "four_player_teams" and _is_bare_fen4(line):
             fen_text = line
-        elif variant == "spell_chess" and "/" in line.split()[0]:
+        elif variant in ("spell_chess", "standard_chess") and "/" in line.split()[0]:
             fen_text = line
 
         if fen_text is not None:
@@ -183,6 +186,41 @@ def _spell_opening(engine: UciEngine, start_fen: str | None,
     return moves
 
 
+def _engine_for(
+    config: Config, variant: VariantConfig,
+    cancel_event: threading.Event | None = None,
+) -> UciEngine:
+    """Create either protocol with the same lifecycle/search interface."""
+    protocol = getattr(variant, "protocol", None) or getattr(config.engine, "protocol", "uci")
+    kwargs = dict(
+        name=variant.name,
+        startup_timeout=config.engine.startup_timeout,
+        move_timeout=config.engine.move_timeout,
+        strict_options=config.engine.strict_options,
+    )
+    if cancel_event is not None:
+        kwargs["cancel_event"] = cancel_event
+    arguments = getattr(variant, "arguments", None)
+    if arguments is None:
+        arguments = getattr(config.engine, "arguments", [])
+    if arguments:
+        kwargs["arguments"] = arguments
+    path = variant.path or config.engine.path
+    if protocol == "uci":
+        return UciEngine(path, **kwargs)
+    if protocol != "xboard":
+        raise ValueError(f"unsupported engine protocol {protocol!r}")
+    name = getattr(variant, "xboard_variant", None) or getattr(
+        config.engine, "xboard_variant", None
+    )
+    if getattr(config, "variant", "four_player_teams") != "standard_chess" and not name:
+        raise ValueError(
+            "XBoard engines in non-standard chess require an explicit "
+            "xboard_variant supported by the engine"
+        )
+    return XBoardEngine(path, variant_name=name, **kwargs)
+
+
 def _play_spell_game(
     config: Config, spec: GameSpec, baseline: VariantConfig, candidate: VariantConfig,
     cancel_event: threading.Event | None = None,
@@ -193,18 +231,8 @@ def _play_spell_game(
     candidate_options = _merged_options(config.engine.common_options, candidate)
     baseline_options = _merged_options(config.engine.common_options, baseline)
     engines = {
-        spec.candidate_team: UciEngine(
-            candidate.path or config.engine.path, name=candidate.name,
-            startup_timeout=config.engine.startup_timeout,
-            move_timeout=config.engine.move_timeout,
-            strict_options=config.engine.strict_options, cancel_event=cancel_event,
-        ),
-        1 - spec.candidate_team: UciEngine(
-            baseline.path or config.engine.path, name=baseline.name,
-            startup_timeout=config.engine.startup_timeout,
-            move_timeout=config.engine.move_timeout,
-            strict_options=config.engine.strict_options, cancel_event=cancel_event,
-        ),
+        spec.candidate_team: _engine_for(config, candidate, cancel_event),
+        1 - spec.candidate_team: _engine_for(config, baseline, cancel_event),
     }
     moves: list[str] = []
     last_result: SearchResult | None = None
@@ -292,11 +320,124 @@ def _merged_options(common: dict[str, Any], variant: VariantConfig) -> dict[str,
     return merged
 
 
+def _play_standard_game(
+    config: Config, spec: GameSpec, baseline: VariantConfig, candidate: VariantConfig,
+    cancel_event: threading.Event | None = None,
+    on_progress: Callable[[GameSpec, str, int], None] | None = None,
+) -> GameRecord:
+    """Play ordinary chess with validated moves and rule-based adjudication.
+
+    Candidate team 0 means White and candidate team 1 means Black. This is
+    separate from IronPhoenix's four-player turn order and mate conventions.
+    """
+    if on_progress is not None:
+        on_progress(spec, "starting", 0)
+    engines = {
+        spec.candidate_team: _engine_for(config, candidate, cancel_event),
+        1 - spec.candidate_team: _engine_for(config, baseline, cancel_event),
+    }
+    options = {
+        spec.candidate_team: _merged_options(config.engine.common_options, candidate),
+        1 - spec.candidate_team: _merged_options(config.engine.common_options, baseline),
+    }
+    moves: list[str] = []
+    last_result: SearchResult | None = None
+    board = chess.Board(spec.start_fen) if spec.start_fen else chess.Board()
+
+    def record(winner: int | None, reason: str) -> GameRecord:
+        return GameRecord(
+            game_id=spec.game_id, candidate_team=spec.candidate_team,
+            result=_candidate_result(winner, spec.candidate_team),
+            winner_team=winner, reason=reason, plies=len(moves),
+            moves=list(moves), opening_moves=list(opening_uci),
+            start_fen=spec.start_fen,
+            last_score_cp=last_result.score_cp if last_result else None,
+            last_score_mate=last_result.score_mate if last_result else None,
+        )
+
+    def terminal() -> tuple[int | None, str] | None:
+        outcome = board.outcome(claim_draw=True)
+        if outcome is None:
+            return None
+        winner = None if outcome.winner is None else int(outcome.winner == chess.BLACK)
+        return winner, outcome.termination.name.lower().replace("_", "-")
+
+    try:
+        for engine in engines.values():
+            engine.start()
+        for team, engine in engines.items():
+            engine.configure(options[team])
+            engine.new_game()
+
+        # Native python-chess handles SAN, legal moves, castling, en passant
+        # and promotion without any nonstandard engine introspection commands.
+        for ply, token in enumerate(spec.opening_moves, 1):
+            try:
+                move = chess.Move.from_uci(token)
+                if move not in board.legal_moves:
+                    move = board.parse_san(token)
+            except ValueError:
+                try:
+                    move = board.parse_san(token)
+                except ValueError as exc:
+                    raise EngineError(f"invalid standard-chess opening ply {ply}: {token!r}") from exc
+            if move not in board.legal_moves:
+                raise EngineError(f"illegal standard-chess opening ply {ply}: {token!r}")
+            board.push(move)
+            moves.append(move.uci())
+
+        opening_uci = list(moves)
+        if on_progress is not None:
+            on_progress(spec, "playing", len(moves))
+
+        for _ in range(config.match.max_plies):
+            if cancel_event is not None and cancel_event.is_set():
+                raise EngineError("match interrupted")
+            end = terminal()
+            if end is not None:
+                return record(*end)
+            side = int(board.turn == chess.BLACK)
+            engine = engines[side]
+            position = _position_command(spec.start_fen, moves)
+            last_result = engine.search(position, config.search.go_command())
+            move_text = last_result.bestmove
+            if move_text == "resign":
+                return record(1 - side, "resignation")
+            if move_text in ("1-0", "0-1", "1/2-1/2"):
+                winner = {"1-0": 0, "0-1": 1, "1/2-1/2": None}[move_text]
+                return record(winner, "engine-result")
+            try:
+                move = chess.Move.from_uci(move_text)
+                if move not in board.legal_moves:
+                    move = board.parse_san(move_text)
+            except ValueError as exc:
+                try:
+                    move = board.parse_san(move_text)
+                except ValueError:
+                    raise EngineError(f"{engine.name} sent invalid move {move_text!r}") from exc
+            if move not in board.legal_moves:
+                raise EngineError(f"{engine.name} sent illegal move {move_text!r}")
+            board.push(move)
+            moves.append(move.uci())
+            if on_progress is not None and len(moves) % 16 == 0:
+                on_progress(spec, "playing", len(moves))
+            end = terminal()
+            if end is not None:
+                return record(*end)
+
+        return record(None, "max-plies")
+    finally:
+        for engine in engines.values():
+            engine.close()
+
+
 def _play_game(
     config: Config, spec: GameSpec, baseline: VariantConfig, candidate: VariantConfig,
     cancel_event: threading.Event | None = None,
     on_progress: Callable[[GameSpec, str, int], None] | None = None,
 ) -> GameRecord:
+    if getattr(config, "variant", "four_player_teams") == "standard_chess":
+        return _play_standard_game(config, spec, baseline, candidate, cancel_event, on_progress)
     if getattr(config, "variant", "four_player_teams") == "spell_chess":
         return _play_spell_game(config, spec, baseline, candidate,
                                 cancel_event, on_progress)
@@ -308,22 +449,8 @@ def _play_game(
     baseline_options = _merged_options(config.engine.common_options, baseline)
 
     engines = {
-        spec.candidate_team: UciEngine(
-            candidate.path or config.engine.path,
-            name=candidate.name,
-            startup_timeout=config.engine.startup_timeout,
-            move_timeout=config.engine.move_timeout,
-            strict_options=config.engine.strict_options,
-            cancel_event=cancel_event,
-        ),
-        1 - spec.candidate_team: UciEngine(
-            baseline.path or config.engine.path,
-            name=baseline.name,
-            startup_timeout=config.engine.startup_timeout,
-            move_timeout=config.engine.move_timeout,
-            strict_options=config.engine.strict_options,
-            cancel_event=cancel_event,
-        ),
+        spec.candidate_team: _engine_for(config, candidate, cancel_event),
+        1 - spec.candidate_team: _engine_for(config, baseline, cancel_event),
     }
 
     moves: list[str] = []
