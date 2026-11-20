@@ -296,6 +296,52 @@ class TexelConfig:
         return cfg
 
 
+
+@dataclass(slots=True)
+class CmaesConfig:
+    """Full-covariance CMA-ES over bounded, quantized UCI parameters."""
+
+    generations: int = 30
+    games_per_trial: int = 40
+    sigma: float = 0.20
+    population_size: int | None = None
+    seed: int = 20261120
+    state_file: str = "results/cmaes_state.pkl"
+    parameters: list[SpsaParameter] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CmaesConfig":
+        cfg = cls(
+            generations=int(data.get("generations", 30)),
+            games_per_trial=int(data.get("games_per_trial", 40)),
+            sigma=float(data.get("sigma", 0.20)),
+            population_size=(int(data["population_size"])
+                             if data.get("population_size") is not None else None),
+            seed=int(data.get("seed", 20261120)),
+            state_file=str(data.get("state_file", "results/cmaes_state.pkl")),
+            parameters=[SpsaParameter.from_dict(p) for p in data.get("parameters", [])],
+        )
+        if cfg.generations < 1 or cfg.games_per_trial < 1 or cfg.games_per_trial % 2:
+            raise ValueError("cmaes generations must be positive and games_per_trial even")
+        if not 0 < cfg.sigma <= 1:
+            raise ValueError("cmaes sigma must be in (0, 1]")
+        if cfg.population_size is not None and cfg.population_size < 4:
+            raise ValueError("cmaes population_size must be >= 4")
+        if not cfg.parameters or len({p.name for p in cfg.parameters}) != len(cfg.parameters):
+            raise ValueError("cmaes parameters must be nonempty and uniquely named")
+        if not cfg.state_file.strip():
+            raise ValueError("cmaes state_file cannot be empty")
+        for p in cfg.parameters:
+            if p.minimum >= p.maximum:
+                raise ValueError(f"{p.name}: CMA-ES bounds must allow variation")
+            if any(abs(v - round(v)) > 1e-9 for v in
+                   (p.minimum, p.maximum, p.value, p.step)):
+                raise ValueError(f"{p.name}: CMA-ES requires integer-valued UCI parameters")
+            if p.step < 1:
+                raise ValueError(f"{p.name}: CMA-ES step must be >= 1")
+        return cfg
+
+
 @dataclass(slots=True)
 class Config:
     engine: EngineConfig
@@ -307,6 +353,7 @@ class Config:
     spsa: SpsaConfig | None = None
     bayesian: BayesianConfig | None = None
     texel: TexelConfig | None = None
+    cmaes: CmaesConfig | None = None
     variant: str = "four_player_teams"
 
     @classmethod
@@ -343,5 +390,6 @@ class Config:
             bayesian=BayesianConfig.from_dict(data["bayesian"])
             if "bayesian" in data else None,
             texel=TexelConfig.from_dict(data["texel"]) if "texel" in data else None,
+            cmaes=CmaesConfig.from_dict(data["cmaes"]) if "cmaes" in data else None,
             variant=variant,
         )

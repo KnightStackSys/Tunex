@@ -1,0 +1,58 @@
+{
+  "variant": "four_player_teams",
+  "engine": {
+    "path": "C:/path/to/IronPhoenix/out/build/x64-release/ironphoenix.exe",
+    "common_options": {
+      "Hash": 64,
+      "MultiPV": 1,
+      "UseNNUE": false
+    }
+  },
+  "search": {
+    "mode": "movetime",
+    "value": 250
+  },
+  "match": {
+    "games": 100,
+    "workers": 4,
+    "paired": true,
+    "seed": 20261120,
+    "openings_file": null,
+    "results_file": "results/cmaes_games.jsonl"
+  },
+  "baseline": {
+    "name": "Fixed baseline",
+    "options": {
+      "SearchLMRBaseX100": 145,
+      "SearchLMRDivisorX100": 324
+    }
+  },
+  "candidate": {
+    "name": "CMA-ES candidate",
+    "options": {}
+  },
+  "cmaes": {
+    "generations": 30,
+    "games_per_trial": 40,
+    "population_size": 8,
+    "sigma": 0.2,
+    "seed": 20261120,
+    "state_file": "results/cmaes_state.pkl",
+    "parameters": [
+      {
+        "name": "SearchLMRBaseX100",
+        "value": 145,
+        "min": 70,
+        "max": 220,
+        "step": 5
+      },
+      {
+        "name": "SearchLMRDivisorX100",
+        "value": 324,
+        "min": 220,
+        "max": 450,
+        "step": 5
+      }
+    ]
+  }
+}
