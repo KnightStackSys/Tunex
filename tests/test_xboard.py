@@ -152,3 +152,64 @@ def test_protocol_config_and_validation(tmp_path):
     config_path.write_text(json.dumps(obj), encoding="utf-8")
     with pytest.raises(ValueError, match="engine.protocol"):
         Config.load(config_path)
+
+
+FAKE_UCI = r'''
+import sys
+import chess
+
+board = chess.Board()
+log_path = sys.argv[1]
+for raw in sys.stdin:
+    line = raw.strip()
+    with open(log_path, "a", encoding="utf-8") as fp:
+        fp.write(line + "\n")
+    if line == "uci":
+        print("id name Fake UCI", flush=True)
+        print("uciok", flush=True)
+    elif line == "isready":
+        print("readyok", flush=True)
+    elif line == "ucinewgame":
+        board.reset()
+    elif line.startswith("position startpos"):
+        board.reset()
+        if " moves " in line:
+            for move in line.split(" moves ", 1)[1].split():
+                board.push_uci(move)
+    elif line.startswith("go "):
+        move = next(iter(board.legal_moves))
+        print("info depth 1 score cp 18 pv " + move.uci(), flush=True)
+        print("bestmove " + move.uci(), flush=True)
+    elif line == "quit":
+        break
+'''
+
+
+def test_mixed_uci_and_xboard_match(tmp_path):
+    xb_script, xb_log = fake_engine(tmp_path)
+    uci_script = tmp_path / "fake_uci.py"
+    uci_script.write_text(FAKE_UCI, encoding="utf-8")
+    uci_log = tmp_path / "uci-commands.txt"
+    config = Config(
+        engine=EngineConfig(
+            path=sys.executable, protocol="xboard",
+            arguments=[str(xb_script), str(xb_log)],
+            startup_timeout=3, move_timeout=5,
+        ),
+        search=SearchConfig(mode="depth", value=1),
+        match=MatchConfig(
+            games=2, workers=1, max_plies=2, paired=True,
+            results_file=str(tmp_path / "mixed.jsonl"),
+        ),
+        baseline=VariantConfig("xb"),
+        candidate=VariantConfig("uci", protocol="uci",
+                                arguments=[str(uci_script), str(uci_log)]),
+        sprt=SprtConfig(),
+        variant="standard_chess",
+    )
+    stats, records = MatchRunner(config).run()
+    assert stats.games == 2
+    assert len(records) == 2
+    assert "protover 2" in xb_log.read_text(encoding="utf-8")
+    assert "uci" in uci_log.read_text(encoding="utf-8")
+    assert all(record.reason == "max-plies" for record in records)
