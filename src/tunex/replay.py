@@ -89,6 +89,8 @@ def replay_game(
     *, report_file: str | Path | None = None,
     on_comparison: Callable[[ReplayComparison], None] | None = None,
 ) -> ReplayReport:
+    if (config.candidate.protocol or config.engine.protocol) != "uci":
+        raise ValueError("4PC PGN replay currently requires the native UCI FEN4/legalmoves commands")
     if config.variant != "four_player_teams":
         raise ValueError("PGN replay is supported for four_player_teams only")
     team = team.upper()
