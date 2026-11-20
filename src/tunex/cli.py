@@ -160,7 +160,7 @@ def _save_sprt_checkpoint(config: Config, total: WDL, played: int) -> None:
         "wdl": asdict(total),
     }
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(payload, indent=2) + "\\n", encoding="utf-8")
+    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     os.replace(temporary, path)
 
 
@@ -187,7 +187,7 @@ def command_sprt(config: Config, *, fresh: bool = False) -> int:
             # batch is not checkpointed and will be replayed on resume.
             raise KeyboardInterrupt
         stop_after_batch.set()
-        print("\\n[SPRT] Stop requested; finishing current batch before saving.",
+        print("\n[SPRT] Stop requested; finishing current batch before saving.",
               flush=True)
 
     if can_install_signal:
