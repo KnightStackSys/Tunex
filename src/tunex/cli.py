@@ -33,11 +33,11 @@ def _load(path: str) -> Config:
 def command_probe(config: Config) -> int:
     options = dict(config.engine.common_options)
     options.update(config.candidate.options)
-    protocol = config.candidate.protocol or config.engine.protocol
+    protocol = getattr(config.candidate, 'protocol', None) or getattr(config.engine, 'protocol', 'uci')
     engine_type = UciEngine if protocol == "uci" else XBoardEngine
-    arguments = config.candidate.arguments
+    arguments = getattr(config.candidate, 'arguments', None)
     if arguments is None:
-        arguments = config.engine.arguments
+        arguments = getattr(config.engine, 'arguments', [])
     kwargs = dict(
         name=config.candidate.name,
         startup_timeout=config.engine.startup_timeout,
@@ -47,7 +47,7 @@ def command_probe(config: Config) -> int:
     if arguments:
         kwargs["arguments"] = arguments
     if protocol == "xboard":
-        kwargs["variant_name"] = config.candidate.xboard_variant or config.engine.xboard_variant
+        kwargs["variant_name"] = getattr(config.candidate, 'xboard_variant', None) or getattr(config.engine, 'xboard_variant', None)
     with engine_type(config.candidate.path or config.engine.path, **kwargs) as engine:
         print(f"engine: {engine.path} ({protocol})")
         print(f"advertised options: {len(engine.options)}")
@@ -103,7 +103,7 @@ def command_match(config: Config, games: int | None) -> int:
     )
     wdl, records = runner.run(
         games=games, on_progress=_game_progress("Match", output_lock,
-                                   standard_chess=config.variant == "standard_chess"),
+                                   standard_chess=getattr(config, "variant", "four_player_teams") == "standard_chess"),
         on_game_complete=completed,
     )
     print(format_summary(wdl))
