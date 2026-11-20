@@ -347,6 +347,30 @@ With paired testing, game 1 assigns the candidate to **Red+Yellow** and game 2 a
 
 Every completed game is appended to the configured JSONL result file.
 
+<a id="-graceful-sprt-pause-and-resume"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/badge-alert.svg" alt="" width="20" height="20"> Graceful SPRT pause and resume
+
+SPRT now writes an atomic checkpoint after every **completed batch**. Press
+**Ctrl+C once** while a batch is running: Tunex finishes the current batch,
+updates the cumulative W/D/L and LLR, saves the checkpoint, then exits. Run
+exactly the same command again to resume at the next game ID without replaying
+completed batches:
+
+```bash
+tunex -c configs/binary-sprt.example.json sprt
+```
+
+Set `sprt.state_file` to an experiment-specific JSON path (default
+`results/sprt_state.json`). To intentionally discard a checkpoint and start
+from zero, use `sprt --fresh`. Checkpoints are bound to the engine, variants,
+opening schedule, match settings and SPRT hypotheses; changing them requires a
+new state file or `--fresh`. Increasing `sprt.max_games` is supported.
+A **second Ctrl+C** aborts immediately; the unfinished batch will be rerun
+on resume. Only completed batches are checkpointed, so crashes or power loss
+may similarly require replaying the last batch. Use a dedicated results file
+per experiment to avoid mixing game logs when restarting with `--fresh`.
+
 <a id="-openings"></a>
 
 ## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/book-open.svg" alt="" width="20" height="20"> Openings
@@ -588,27 +612,3 @@ For HCE tuning, Tunex can already tune the exposed material and mobility UCI wei
 ## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/scale.svg" alt="" width="20" height="20"> License
 
 GPL-3.0-or-later. See `LICENSE`.
-
-
-## CMA-ES tuning (full covariance)
-
-Install the package (`pip install -e .`) and run:
-
-```bash
-tunex -c configs/cmaes.example.json cmaes --generations 30
-```
-
-The `cmaes` section supports `generations`, `games_per_trial` (even),
-`sigma` (normalized coordinate scale), optional `population_size`, `seed`,
-`state_file`, and integer `parameters` with `name`, `value`, `min`,
-`max`, and `step`. Tunex uses pycma's full covariance ask/tell
-strategy; each generation evaluates every sampled configuration against the
-same fixed baseline with paired openings. Values are clipped and rounded onto
-the configured UCI grids. The optimizer resumes at completed generation
-boundaries using a local pickle checkpoint. **Only load checkpoint files you
-created and trust**: pickle files can execute code when opened. Avoid changing
-engine, baseline, opening suite, or parameter bounds when resuming; incompatible
-configurations are rejected. Partial generations rerun after interruption.
-
-Small-sample match results are noisy: independently verify the best observed
-configuration with a longer match or SPRT before adopting it.

@@ -108,6 +108,7 @@ class SprtConfig:
     beta: float = 0.05
     max_games: int = 10000
     batch_games: int = 20
+    state_file: str = "results/sprt_state.json"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "SprtConfig":
@@ -119,6 +120,7 @@ class SprtConfig:
             beta=float(data.get("beta", 0.05)),
             max_games=int(data.get("max_games", 10000)),
             batch_games=int(data.get("batch_games", 20)),
+            state_file=str(data.get("state_file", "results/sprt_state.json")),
         )
         if not 0.0 < cfg.alpha < 1.0 or not 0.0 < cfg.beta < 1.0:
             raise ValueError("SPRT alpha/beta must be in (0, 1)")
@@ -126,6 +128,8 @@ class SprtConfig:
             raise ValueError("SPRT max_games and batch_games must be > 0")
         if cfg.batch_games % 2:
             raise ValueError("sprt.batch_games should be even for paired 4PC testing")
+        if not cfg.state_file.strip():
+            raise ValueError("sprt.state_file cannot be empty")
         if cfg.elo1 <= cfg.elo0:
             raise ValueError("sprt.elo1 must be greater than sprt.elo0")
         return cfg
