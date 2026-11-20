@@ -588,3 +588,27 @@ For HCE tuning, Tunex can already tune the exposed material and mobility UCI wei
 ## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/scale.svg" alt="" width="20" height="20"> License
 
 GPL-3.0-or-later. See `LICENSE`.
+
+
+## CMA-ES tuning (full covariance)
+
+Install the package (`pip install -e .`) and run:
+
+```bash
+tunex -c configs/cmaes.example.json cmaes --generations 30
+```
+
+The `cmaes` section supports `generations`, `games_per_trial` (even),
+`sigma` (normalized coordinate scale), optional `population_size`, `seed`,
+`state_file`, and integer `parameters` with `name`, `value`, `min`,
+`max`, and `step`. Tunex uses pycma's full covariance ask/tell
+strategy; each generation evaluates every sampled configuration against the
+same fixed baseline with paired openings. Values are clipped and rounded onto
+the configured UCI grids. The optimizer resumes at completed generation
+boundaries using a local pickle checkpoint. **Only load checkpoint files you
+created and trust**: pickle files can execute code when opened. Avoid changing
+engine, baseline, opening suite, or parameter bounds when resuming; incompatible
+configurations are rejected. Partial generations rerun after interruption.
+
+Small-sample match results are noisy: independently verify the best observed
+configuration with a longer match or SPRT before adopting it.

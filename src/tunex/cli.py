@@ -6,6 +6,7 @@ import sys
 import threading
 
 from .bayesian import BayesianRunner
+from .cmaes import CmaesRunner
 from .config import Config
 from .engine import EngineError, UciEngine
 from .match import GameRecord, GameSpec, MatchRunner
@@ -180,6 +181,15 @@ def command_bayesian(config: Config, iterations: int | None) -> int:
     return 0
 
 
+def command_cmaes(config: Config, generations: int | None) -> int:
+    runner = CmaesRunner(config)
+    runner.run(generations)
+    print("best observed CMA-ES options (validate with independent SPRT):")
+    for name, value in runner.best_options().items():
+        print(f"  {name} = {value}")
+    return 0
+
+
 def command_texel(config: Config, epochs: int | None) -> int:
     runner = TexelRunner(config)
     runner.run(epochs)
@@ -252,6 +262,9 @@ def build_parser() -> argparse.ArgumentParser:
     bayesian = sub.add_parser("bayesian", help="run resumable Bayesian TPE tuning")
     bayesian.add_argument("--iterations", type=int, default=None)
 
+    cmaes = sub.add_parser("cmaes", help="run resumable full-covariance CMA-ES tuning")
+    cmaes.add_argument("--generations", type=int, default=None)
+
     texel = sub.add_parser("texel", help="fit HCE weights to labeled positions")
     texel.add_argument("--epochs", type=int, default=None)
 
@@ -284,6 +297,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_spsa(config, args.iterations)
         if args.command == "bayesian":
             return command_bayesian(config, args.iterations)
+        if args.command == "cmaes":
+            return command_cmaes(config, args.generations)
         if args.command == "texel":
             return command_texel(config, args.epochs)
     except KeyboardInterrupt:

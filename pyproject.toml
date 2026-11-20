@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "KnightStackSys" }]
-dependencies = []
+dependencies = ["cma>=4.0,<5"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
