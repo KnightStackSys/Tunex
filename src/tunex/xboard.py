@@ -244,4 +244,4 @@ class XBoardEngine(UciEngine):
         return []
 
     def _quit_commands(self) -> str:
-        return "force\\nquit\\n"
+        return "force\nquit\n"
