@@ -379,7 +379,7 @@ class UciEngine:
         return [line for line in lines if line != "readyok"]
 
     def _quit_commands(self) -> str:
-        return "stop\\nquit\\n"
+        return "stop\nquit\n"
 
     def close(self) -> None:
         proc = self.process
