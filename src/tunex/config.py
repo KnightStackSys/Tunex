@@ -33,17 +33,29 @@ class EngineConfig:
     startup_timeout: float = 10.0
     move_timeout: float = 60.0
     strict_options: bool = True
+    protocol: str = "uci"
+    arguments: list[str] = field(default_factory=list)
+    xboard_variant: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "EngineConfig":
         if "path" not in data:
             raise ValueError("engine.path is required")
+        protocol = str(data.get("protocol", "uci")).lower()
+        if protocol not in {"uci", "xboard"}:
+            raise ValueError("engine.protocol must be uci or xboard")
+        arguments = data.get("arguments", [])
+        if not isinstance(arguments, list) or not all(isinstance(a, str) for a in arguments):
+            raise ValueError("engine.arguments must be an array of strings")
         return cls(
             path=str(data["path"]),
             common_options=dict(data.get("common_options", {})),
             startup_timeout=float(data.get("startup_timeout", 10.0)),
             move_timeout=float(data.get("move_timeout", 60.0)),
             strict_options=bool(data.get("strict_options", True)),
+            protocol=protocol,
+            arguments=list(arguments),
+            xboard_variant=data.get("xboard_variant"),
         )
 
 
@@ -54,16 +66,30 @@ class VariantConfig:
     # Optional executable override. Default remains engine.path for existing
     # SPRT, fixed-match and SPSA configurations.
     path: str | None = None
+    protocol: str | None = None
+    arguments: list[str] | None = None
+    xboard_variant: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], default_name: str) -> "VariantConfig":
         path = data.get("path")
         if path is not None and (not isinstance(path, str) or not path.strip()):
             raise ValueError(f"{default_name}.path must be a nonempty string")
+        protocol = data.get("protocol")
+        if protocol is not None and protocol not in ("uci", "xboard"):
+            raise ValueError(f"{default_name}.protocol must be uci or xboard")
+        arguments = data.get("arguments")
+        if arguments is not None and (
+            not isinstance(arguments, list) or not all(isinstance(a, str) for a in arguments)
+        ):
+            raise ValueError(f"{default_name}.arguments must be an array of strings")
         return cls(
             name=str(data.get("name", default_name)),
             options=dict(data.get("options", {})),
             path=path,
+            protocol=protocol,
+            arguments=arguments,
+            xboard_variant=data.get("xboard_variant"),
         )
 
 
@@ -361,8 +387,8 @@ class Config:
         config_path = Path(path)
         data = json.loads(config_path.read_text(encoding="utf-8"))
         variant = str(data.get("variant", "four_player_teams")).lower()
-        if variant not in {"four_player_teams", "spell_chess"}:
-            raise ValueError("variant must be four_player_teams or spell_chess")
+        if variant not in {"four_player_teams", "spell_chess", "standard_chess"}:
+            raise ValueError("variant must be four_player_teams, spell_chess or standard_chess")
         if "texel" in data and data["texel"].get("dataset"):
             dataset = Path(data["texel"]["dataset"])
             if not dataset.is_absolute():
