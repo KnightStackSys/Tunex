@@ -320,6 +320,117 @@ def _merged_options(common: dict[str, Any], variant: VariantConfig) -> dict[str,
     return merged
 
 
+def _play_standard_game(
+    config: Config, spec: GameSpec, baseline: VariantConfig, candidate: VariantConfig,
+    cancel_event: threading.Event | None = None,
+    on_progress: Callable[[GameSpec, str, int], None] | None = None,
+) -> GameRecord:
+    """Play ordinary chess with validated moves and rule-based adjudication.
+
+    Candidate team 0 means White and candidate team 1 means Black. This is
+    separate from IronPhoenix's four-player turn order and mate conventions.
+    """
+    if on_progress is not None:
+        on_progress(spec, "starting", 0)
+    engines = {
+        spec.candidate_team: _engine_for(config, candidate, cancel_event),
+        1 - spec.candidate_team: _engine_for(config, baseline, cancel_event),
+    }
+    options = {
+        spec.candidate_team: _merged_options(config.engine.common_options, candidate),
+        1 - spec.candidate_team: _merged_options(config.engine.common_options, baseline),
+    }
+    moves: list[str] = []
+    last_result: SearchResult | None = None
+    board = chess.Board(spec.start_fen) if spec.start_fen else chess.Board()
+
+    def record(winner: int | None, reason: str) -> GameRecord:
+        return GameRecord(
+            game_id=spec.game_id, candidate_team=spec.candidate_team,
+            result=_candidate_result(winner, spec.candidate_team),
+            winner_team=winner, reason=reason, plies=len(moves),
+            moves=list(moves), opening_moves=list(opening_uci),
+            start_fen=spec.start_fen,
+            last_score_cp=last_result.score_cp if last_result else None,
+            last_score_mate=last_result.score_mate if last_result else None,
+        )
+
+    def terminal() -> tuple[int | None, str] | None:
+        outcome = board.outcome(claim_draw=True)
+        if outcome is None:
+            return None
+        winner = None if outcome.winner is None else int(outcome.winner == chess.BLACK)
+        return winner, outcome.termination.name.lower().replace("_", "-")
+
+    try:
+        for engine in engines.values():
+            engine.start()
+        for team, engine in engines.items():
+            engine.configure(options[team])
+            engine.new_game()
+
+        # Native python-chess handles SAN, legal moves, castling, en passant
+        # and promotion without any nonstandard engine introspection commands.
+        for ply, token in enumerate(spec.opening_moves, 1):
+            try:
+                move = chess.Move.from_uci(token)
+                if move not in board.legal_moves:
+                    move = board.parse_san(token)
+            except ValueError:
+                try:
+                    move = board.parse_san(token)
+                except ValueError as exc:
+                    raise EngineError(f"invalid standard-chess opening ply {ply}: {token!r}") from exc
+            if move not in board.legal_moves:
+                raise EngineError(f"illegal standard-chess opening ply {ply}: {token!r}")
+            board.push(move)
+            moves.append(move.uci())
+
+        opening_uci = list(moves)
+        if on_progress is not None:
+            on_progress(spec, "playing", len(moves))
+
+        for _ in range(config.match.max_plies):
+            if cancel_event is not None and cancel_event.is_set():
+                raise EngineError("match interrupted")
+            end = terminal()
+            if end is not None:
+                return record(*end)
+            side = int(board.turn == chess.BLACK)
+            engine = engines[side]
+            position = _position_command(spec.start_fen, moves)
+            last_result = engine.search(position, config.search.go_command())
+            move_text = last_result.bestmove
+            if move_text == "resign":
+                return record(1 - side, "resignation")
+            if move_text in ("1-0", "0-1", "1/2-1/2"):
+                winner = {"1-0": 0, "0-1": 1, "1/2-1/2": None}[move_text]
+                return record(winner, "engine-result")
+            try:
+                move = chess.Move.from_uci(move_text)
+                if move not in board.legal_moves:
+                    move = board.parse_san(move_text)
+            except ValueError as exc:
+                try:
+                    move = board.parse_san(move_text)
+                except ValueError:
+                    raise EngineError(f"{engine.name} sent invalid move {move_text!r}") from exc
+            if move not in board.legal_moves:
+                raise EngineError(f"{engine.name} sent illegal move {move_text!r}")
+            board.push(move)
+            moves.append(move.uci())
+            if on_progress is not None and len(moves) % 16 == 0:
+                on_progress(spec, "playing", len(moves))
+            end = terminal()
+            if end is not None:
+                return record(*end)
+
+        return record(None, "max-plies")
+    finally:
+        for engine in engines.values():
+            engine.close()
+
+
 def _play_game(
     config: Config, spec: GameSpec, baseline: VariantConfig, candidate: VariantConfig,
     cancel_event: threading.Event | None = None,
