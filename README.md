@@ -550,71 +550,9 @@ State is written after every iteration. Restarting the same command resumes from
 
 SPSA creates a `+` and `-` parameter vector each iteration, runs them directly against one another in paired games, estimates a gradient, and moves the center parameter vector.
 
-<a id="-parallelism"></a>
+<a id="-xboardwinboard-engines-cecp"></a>
 
-## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/cpu.svg" alt="" width="20" height="20"> Parallelism
-
-`match.workers` controls simultaneous games. Each game uses **two IronPhoenix processes**, so `workers = 4` can use up to eight engine processes at once.
-
-Start conservatively. For stable Elo testing, avoiding CPU oversubscription is more important than maximizing raw throughput.
-
-<a id="-stopping-a-run-ctrlc"></a>
-
-## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/circle-stop.svg" alt="" width="20" height="20"> Stopping a run (Ctrl+C)
-
-Press **Ctrl+C** once in the terminal to interrupt a match, SPRT, or SPSA run. Tunex cancels games that have not started, signals active workers to stop, and closes their IronPhoenix subprocesses and redirected streams.
-
-- **SPSA:** Each completed iteration is saved to `spsa.state_file`. Interruptions midway through an iteration do not commit a partial parameter update; rerun with the same configuration to resume from the last completed iteration.
-- **Match/SPRT:** Finished game records in the JSONL results file remain on disk. Starting a new match or SPRT command does not resume the previous aggregate statistics.
-- **Exit code:** Ctrl+C exits with code `130` rather than showing a Python traceback.
-
-If IronPhoenix ignores `stop` / `quit`, Tunex force-terminates the subprocess rather than waiting indefinitely.
-
-<a id="-result-termination"></a>
-
-## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flag.svg" alt="" width="20" height="20"> Result termination
-
-Tunex currently ends a game when:
-
-- IronPhoenix returns `mate 1` for the chosen root move (immediate terminal king capture),
-- IronPhoenix returns `bestmove 0000`; Tunex checks whether the side is in check and records checkmate or stalemate,
-- or `max_plies` is reached, which is recorded as a draw.
-
-If IronPhoenix exits, hangs, or violates the expected protocol, the experiment fails rather than silently counting a bogus result.
-
-<a id="-suggested-ironphoenix-workflow"></a>
-
-## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/compass.svg" alt="" width="20" height="20"> Suggested IronPhoenix workflow
-
-For isolated feature tests:
-
-```text
-baseline = current main/default parameter values
-candidate = one changed parameter or feature
-MultiPV = 1
-same Hash
-same time control
-paired openings
-same adjudication
-```
-
-For search tuning:
-
-1. Use SPRT to establish that a search feature itself is healthy.
-2. Expose its important constants as UCI spin parameters.
-3. Use SPSA to tune several interacting constants.
-4. Validate the final vector in a fresh long match/SPRT against the untouched baseline.
-
-For HCE tuning, Tunex can already tune the exposed material and mobility UCI weights by games. A future offline/Texel mode can add much faster position-loss optimization without changing the match/SPSA layer.
-
-<a id="-license"></a>
-
-## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/scale.svg" alt="" width="20" height="20"> License
-
-GPL-3.0-or-later. See `LICENSE`.
-
-
-## XBoard / WinBoard engines (CECP)
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/cable.svg" alt="" width="20" height="20"> XBoard / WinBoard engines (CECP)
 
 Tunex can run **UCI and XBoard engines in the same match or SPRT**, including
 SPSA, CMA-ES and Bayesian tuning that use the match runner. UCI remains the
@@ -680,3 +618,66 @@ and options.
 - A normal 8x8 game is adjudicated using actual chess rules (including
   checkmate, stalemate, repetition and the 50-move rule). SPRT and paired
   results retain the existing W/D/L reporting conventions.
+
+<a id="-parallelism"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/cpu.svg" alt="" width="20" height="20"> Parallelism
+
+`match.workers` controls simultaneous games. Each game uses **two IronPhoenix processes**, so `workers = 4` can use up to eight engine processes at once.
+
+Start conservatively. For stable Elo testing, avoiding CPU oversubscription is more important than maximizing raw throughput.
+
+<a id="-stopping-a-run-ctrlc"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/circle-stop.svg" alt="" width="20" height="20"> Stopping a run (Ctrl+C)
+
+Press **Ctrl+C** once in the terminal to interrupt a match, SPRT, or SPSA run. Tunex cancels games that have not started, signals active workers to stop, and closes their IronPhoenix subprocesses and redirected streams.
+
+- **SPSA:** Each completed iteration is saved to `spsa.state_file`. Interruptions midway through an iteration do not commit a partial parameter update; rerun with the same configuration to resume from the last completed iteration.
+- **Match/SPRT:** Finished game records in the JSONL results file remain on disk. Starting a new match or SPRT command does not resume the previous aggregate statistics.
+- **Exit code:** Ctrl+C exits with code `130` rather than showing a Python traceback.
+
+If IronPhoenix ignores `stop` / `quit`, Tunex force-terminates the subprocess rather than waiting indefinitely.
+
+<a id="-result-termination"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flag.svg" alt="" width="20" height="20"> Result termination
+
+Tunex currently ends a game when:
+
+- IronPhoenix returns `mate 1` for the chosen root move (immediate terminal king capture),
+- IronPhoenix returns `bestmove 0000`; Tunex checks whether the side is in check and records checkmate or stalemate,
+- or `max_plies` is reached, which is recorded as a draw.
+
+If IronPhoenix exits, hangs, or violates the expected protocol, the experiment fails rather than silently counting a bogus result.
+
+<a id="-suggested-ironphoenix-workflow"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/compass.svg" alt="" width="20" height="20"> Suggested IronPhoenix workflow
+
+For isolated feature tests:
+
+```text
+baseline = current main/default parameter values
+candidate = one changed parameter or feature
+MultiPV = 1
+same Hash
+same time control
+paired openings
+same adjudication
+```
+
+For search tuning:
+
+1. Use SPRT to establish that a search feature itself is healthy.
+2. Expose its important constants as UCI spin parameters.
+3. Use SPSA to tune several interacting constants.
+4. Validate the final vector in a fresh long match/SPRT against the untouched baseline.
+
+For HCE tuning, Tunex can already tune the exposed material and mobility UCI weights by games. A future offline/Texel mode can add much faster position-loss optimization without changing the match/SPSA layer.
+
+<a id="-license"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/scale.svg" alt="" width="20" height="20"> License
+
+GPL-3.0-or-later. See `LICENSE`.
