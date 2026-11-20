@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from tunex.cmaes import CmaesRunner, quantize
+from tunex.stats import WDL
 from tunex.config import CmaesConfig, SpsaParameter
 
 
@@ -58,7 +58,7 @@ def test_cmaes_ask_tell_and_checkpoint(tmp_path, monkeypatch):
             calls.append(kwargs)
             options = kwargs["candidate"].options
             score = 1 if options["X"] >= 5 else 0
-            return SimpleNamespace(wins=2 * score, draws=0, losses=2 * (1 - score), games=2), []
+            return WDL(wins=2 * score, draws=0, losses=2 * (1 - score)), []
     monkeypatch.setattr(cmaes, "MatchRunner", FakeMatch)
     runner = CmaesRunner(cfg)
     runner.run(1)
