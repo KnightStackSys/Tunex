@@ -9,8 +9,11 @@ import re
 import threading
 from typing import Any, Callable
 
+import chess
+
 from .config import Config, VariantConfig
 from .engine import EngineError, SearchResult, UciEngine
+from .xboard import XBoardEngine
 from .notation import coordinate_move, san_to_uci
 from .stats import WDL
 
@@ -78,7 +81,7 @@ def _load_openings(path: str | None, variant: str = "four_player_teams") -> list
             fen_text = line[4:].strip()
         elif variant == "four_player_teams" and _is_bare_fen4(line):
             fen_text = line
-        elif variant == "spell_chess" and "/" in line.split()[0]:
+        elif variant in ("spell_chess", "standard_chess") and "/" in line.split()[0]:
             fen_text = line
 
         if fen_text is not None:
@@ -183,6 +186,41 @@ def _spell_opening(engine: UciEngine, start_fen: str | None,
     return moves
 
 
+def _engine_for(
+    config: Config, variant: VariantConfig,
+    cancel_event: threading.Event | None = None,
+) -> UciEngine:
+    """Create either protocol with the same lifecycle/search interface."""
+    protocol = getattr(variant, "protocol", None) or getattr(config.engine, "protocol", "uci")
+    kwargs = dict(
+        name=variant.name,
+        startup_timeout=config.engine.startup_timeout,
+        move_timeout=config.engine.move_timeout,
+        strict_options=config.engine.strict_options,
+    )
+    if cancel_event is not None:
+        kwargs["cancel_event"] = cancel_event
+    arguments = getattr(variant, "arguments", None)
+    if arguments is None:
+        arguments = getattr(config.engine, "arguments", [])
+    if arguments:
+        kwargs["arguments"] = arguments
+    path = variant.path or config.engine.path
+    if protocol == "uci":
+        return UciEngine(path, **kwargs)
+    if protocol != "xboard":
+        raise ValueError(f"unsupported engine protocol {protocol!r}")
+    name = getattr(variant, "xboard_variant", None) or getattr(
+        config.engine, "xboard_variant", None
+    )
+    if getattr(config, "variant", "four_player_teams") != "standard_chess" and not name:
+        raise ValueError(
+            "XBoard engines in non-standard chess require an explicit "
+            "xboard_variant supported by the engine"
+        )
+    return XBoardEngine(path, variant_name=name, **kwargs)
+
+
 def _play_spell_game(
     config: Config, spec: GameSpec, baseline: VariantConfig, candidate: VariantConfig,
     cancel_event: threading.Event | None = None,
@@ -193,18 +231,8 @@ def _play_spell_game(
     candidate_options = _merged_options(config.engine.common_options, candidate)
     baseline_options = _merged_options(config.engine.common_options, baseline)
     engines = {
-        spec.candidate_team: UciEngine(
-            candidate.path or config.engine.path, name=candidate.name,
-            startup_timeout=config.engine.startup_timeout,
-            move_timeout=config.engine.move_timeout,
-            strict_options=config.engine.strict_options, cancel_event=cancel_event,
-        ),
-        1 - spec.candidate_team: UciEngine(
-            baseline.path or config.engine.path, name=baseline.name,
-            startup_timeout=config.engine.startup_timeout,
-            move_timeout=config.engine.move_timeout,
-            strict_options=config.engine.strict_options, cancel_event=cancel_event,
-        ),
+        spec.candidate_team: _engine_for(config, candidate, cancel_event),
+        1 - spec.candidate_team: _engine_for(config, baseline, cancel_event),
     }
     moves: list[str] = []
     last_result: SearchResult | None = None
@@ -297,6 +325,8 @@ def _play_game(
     cancel_event: threading.Event | None = None,
     on_progress: Callable[[GameSpec, str, int], None] | None = None,
 ) -> GameRecord:
+    if getattr(config, "variant", "four_player_teams") == "standard_chess":
+        return _play_standard_game(config, spec, baseline, candidate, cancel_event, on_progress)
     if getattr(config, "variant", "four_player_teams") == "spell_chess":
         return _play_spell_game(config, spec, baseline, candidate,
                                 cancel_event, on_progress)
@@ -308,22 +338,8 @@ def _play_game(
     baseline_options = _merged_options(config.engine.common_options, baseline)
 
     engines = {
-        spec.candidate_team: UciEngine(
-            candidate.path or config.engine.path,
-            name=candidate.name,
-            startup_timeout=config.engine.startup_timeout,
-            move_timeout=config.engine.move_timeout,
-            strict_options=config.engine.strict_options,
-            cancel_event=cancel_event,
-        ),
-        1 - spec.candidate_team: UciEngine(
-            baseline.path or config.engine.path,
-            name=baseline.name,
-            startup_timeout=config.engine.startup_timeout,
-            move_timeout=config.engine.move_timeout,
-            strict_options=config.engine.strict_options,
-            cancel_event=cancel_event,
-        ),
+        spec.candidate_team: _engine_for(config, candidate, cancel_event),
+        1 - spec.candidate_team: _engine_for(config, baseline, cancel_event),
     }
 
     moves: list[str] = []
