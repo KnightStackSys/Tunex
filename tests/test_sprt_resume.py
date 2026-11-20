@@ -29,6 +29,9 @@ def config(tmp_path):
 def test_checkpoint_roundtrip_and_incompatible_config(tmp_path):
     cfg = config(tmp_path)
     cli._save_sprt_checkpoint(cfg, WDL(wins=1, draws=1), 2)
+    checkpoint_text = (tmp_path / "sprt_state.json").read_text(encoding="utf-8")
+    assert checkpoint_text.endswith("\n")
+    assert json.loads(checkpoint_text)["played"] == 2
     total, played = cli._load_sprt_checkpoint(cfg)
     assert played == 2 and (total.wins, total.draws, total.losses) == (1, 1, 0)
     cfg.search.value = 200
