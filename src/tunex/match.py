@@ -213,11 +213,9 @@ def _engine_for(
     name = getattr(variant, "xboard_variant", None) or getattr(
         config.engine, "xboard_variant", None
     )
-    if getattr(config, "variant", "four_player_teams") != "standard_chess" and not name:
-        raise ValueError(
-            "XBoard engines in non-standard chess require an explicit "
-            "xboard_variant supported by the engine"
-        )
+    # CECP engines can implement four-player Teams as their *native*
+    # starting position without advertising a CECP variant name. Only
+    # send the optional variant command when explicitly configured.
     return XBoardEngine(path, variant_name=name, **kwargs)
 
 
@@ -464,12 +462,14 @@ def _play_game(
         for engine in engines.values():
             engine.new_game()
 
-        # Convert against IronPhoenix's actual legal 4PC move list rather
-        # than applying orthodox 8x8 SAN rules. The same converted opening
-        # is used by either team in paired games; conversion runs BEFORE go,
-        # without resetting the engines' correction histories during play.
-        moves = _convert_opening(engines[spec.candidate_team],
-                                 spec.start_fen, spec.opening_moves)
+        # Coordinate moves work with either protocol. SAN conversion
+        # requires one native UCI 4PC engine to expose FEN4/legalmoves;
+        # prefer it even if the candidate uses XBoard.
+        opening_engine = next(
+            (eng for eng in engines.values() if not isinstance(eng, XBoardEngine)),
+            engines[spec.candidate_team],
+        )
+        moves = _convert_opening(opening_engine, spec.start_fen, spec.opening_moves)
         opening_uci = list(moves)
         if on_progress is not None:
             on_progress(spec, "playing", len(moves))
@@ -484,7 +484,32 @@ def _play_game(
             result = engine.search(position, config.search.go_command())
             last_result = result
 
+            # CECP engines can report resignation or a final score in place
+            # of a move. Treat 1-0 as Red+Yellow, 0-1 as Blue+Green,
+            # and keep the reported outcome in SPRT W/D/L statistics.
+            if result.bestmove in ("resign", "1-0", "0-1", "1/2-1/2"):
+                winner = (
+                    1 - team if result.bestmove == "resign" else
+                    {"1-0": 0, "0-1": 1, "1/2-1/2": None}[result.bestmove]
+                )
+                return GameRecord(
+                    game_id=spec.game_id,
+                    candidate_team=spec.candidate_team,
+                    result=_candidate_result(winner, spec.candidate_team),
+                    winner_team=winner,
+                    reason="resignation" if result.bestmove == "resign" else "engine-result",
+                    plies=len(moves), moves=list(moves),
+                    opening_moves=list(opening_uci), start_fen=spec.start_fen,
+                    last_score_cp=result.score_cp,
+                    last_score_mate=result.score_mate,
+                )
+
             if result.bestmove == "0000":
+                if isinstance(engine, XBoardEngine):
+                    raise EngineError(
+                        f"{engine.name}: XBoard reported no move without an outcome; "
+                        "send 'resign' or '1-0'/'0-1'/'1/2-1/2' for 4PC Teams"
+                    )
                 in_check = engine.side_in_check(position)
                 if in_check:
                     winner_team = 1 - team
@@ -513,7 +538,7 @@ def _play_game(
             # IronPhoenix encodes an immediate terminal king capture as mate 1
             # at the root (MATE_SCORE - 1). End immediately so the tuner does
             # not attempt to continue a game after the 4PC terminal capture.
-            if result.score_mate == 1:
+            if result.score_mate == 1 and not isinstance(engine, XBoardEngine):
                 winner_team = team
                 return GameRecord(
                     game_id=spec.game_id,

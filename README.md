@@ -658,12 +658,25 @@ and options.
   Standard CECP does not guarantee a fixed-node search command:
   `search.mode=nodes` is rejected for XBoard.
 - Coordinate, SAN and standard FEN opening files work in `standard_chess`.
-  For other variants an XBoard engine must explicitly advertise and support
-  the configured `xboard_variant` (set at engine or variant level), plus the
-  variant's move/FEN format. Ordinary XBoard engines do **not** play 4PC Teams
-  or Spell Chess merely by speaking CECP. Custom FEN4 legal-move introspection,
-  SpellWarden commands, PGN4 replay, and Texel static evaluation remain
-  UCI-only.
+  **Native 4-player Teams XBoard engines are supported too**: select
+  `"variant": "four_player_teams"`, set `engine.protocol` (or a per-engine
+  protocol override) to `"xboard"`, and use 4PC coordinate moves. The
+  referee preserves Red → Blue → Yellow → Green and Red+Yellow vs Blue+Green
+  outcomes. A native 4PC CECP engine does **not** need to advertise a variant
+  name. Set `xboard_variant` only if your engine explicitly requires the
+  `variant NAME` CECP command and advertises that name.
+- See [configs/xboard-4pc-teams.example.json](configs/xboard-4pc-teams.example.json)
+  for **4PC XBoard vs IronPhoenix UCI** matches/SPRT. Both engines can
+  also be XBoard by removing the candidate's `protocol: uci` override
+  and selecting a second native 4PC XBoard executable.
+- For 4PC openings, coordinate moves need no engine-specific extension.
+  Native FEN4 starts require the XBoard engine's `setboard=1` feature
+  **and** its acceptance of the supplied FEN4 dialect. SAN conversion
+  requires at least one UCI 4PC engine exposing IronPhoenix's
+  `fen`/`moves` commands. Generic XBoard does not guarantee these commands.
+  A non-native 4PC engine cannot acquire 4PC rules simply through CECP.
+  SpellWarden-specific operations, PGN4 replay, and Texel static evaluation
+  still require UCI.
 - A normal 8x8 game is adjudicated using actual chess rules (including
   checkmate, stalemate, repetition and the 50-move rule). SPRT and paired
   results retain the existing W/D/L reporting conventions.
