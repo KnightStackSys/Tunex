@@ -1,0 +1,47 @@
+{
+  "variant": "four_player_teams",
+  "engine": {
+    "path": "C:/Engines/4pc-xboard.exe",
+    "protocol": "xboard",
+    "startup_timeout": 10,
+    "move_timeout": 60,
+    "strict_options": true,
+    "common_options": {}
+  },
+  "baseline": {
+    "name": "4PC Teams XBoard",
+    "path": "C:/Engines/4pc-xboard.exe",
+    "options": {}
+  },
+  "candidate": {
+    "name": "IronPhoenix UCI",
+    "path": "C:/Engines/ironphoenix.exe",
+    "protocol": "uci",
+    "options": {
+      "Hash": 64,
+      "UseNNUE": false
+    }
+  },
+  "search": {
+    "mode": "movetime",
+    "value": 1000
+  },
+  "match": {
+    "games": 100,
+    "workers": 2,
+    "max_plies": 320,
+    "paired": true,
+    "seed": 20261009,
+    "openings_file": null,
+    "results_file": "results/xboard-4pc-teams-games.jsonl"
+  },
+  "sprt": {
+    "elo0": 0,
+    "elo1": 5,
+    "alpha": 0.05,
+    "beta": 0.05,
+    "max_games": 10000,
+    "batch_games": 20,
+    "state_file": "results/xboard-4pc-teams-sprt.json"
+  }
+}
