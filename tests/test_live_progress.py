@@ -1,11 +1,10 @@
 """Live progress covers games that have not finished and SPRT batches."""
 
 import threading
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from tunex.cli import _game_progress, command_sprt
-from tunex.config import SearchConfig, SprtConfig, VariantConfig
+from tunex.config import Config, EngineConfig, MatchConfig, SearchConfig, SprtConfig, VariantConfig
 from tunex.engine import SearchResult
 from tunex.match import GameSpec, MatchRunner
 
@@ -34,8 +33,8 @@ class FakeEngine:
 
 
 def config(workers=2, games=2, plies=33):
-    return SimpleNamespace(
-        engine=SimpleNamespace(
+    return Config(
+        engine=EngineConfig(
             path="shared.exe", common_options={},
             startup_timeout=1.0, move_timeout=1.0,
             strict_options=True,
@@ -43,13 +42,12 @@ def config(workers=2, games=2, plies=33):
         baseline=VariantConfig("baseline", path="old.exe"),
         candidate=VariantConfig("candidate", path="new.exe"),
         search=SearchConfig(mode="movetime", value=250),
-        match=SimpleNamespace(
+        match=MatchConfig(
             paired=True, workers=workers, games=games, seed=9,
             max_plies=plies, openings_file=None, results_file="unused.jsonl",
         ),
         sprt=SprtConfig(elo0=0, elo1=5, max_games=games, batch_games=2),
     )
-
 
 def test_progress_starts_before_game_finishes_and_reports_ply_counts():
     for workers in (1, 2):
@@ -112,13 +110,14 @@ def test_sprt_quiet_progress_does_not_change_match_progress(capsys):
 def test_sprt_prints_start_per_game_and_batch_decision(capsys, tmp_path):
     cfg = config(workers=2, plies=17)
     cfg.match.results_file = str(tmp_path / "games.jsonl")
+    cfg.sprt.state_file = str(tmp_path / "sprt_state.json")
     with patch("tunex.match.UciEngine", FakeEngine):
         # No decisive score after two draws, so the SPRT hits max_games.
         code = command_sprt(cfg)
 
     output = capsys.readouterr().out
     assert code == 3
-    assert "[SPRT] Starting | baseline=old.exe | candidate=new.exe" in output
+    assert "[SPRT] Starting at 0 games | baseline=old.exe | candidate=new.exe" in output
     assert "workers=2 | go movetime 250" in output
     assert "Game 1 starting" in output
     assert "Game 2 starting" in output

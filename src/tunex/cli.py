@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
+import hashlib
+import os
+from pathlib import Path
+import signal
 import json
 import sys
 import threading
@@ -96,7 +101,73 @@ def command_match(config: Config, games: int | None) -> int:
     return 0
 
 
-def command_sprt(config: Config) -> int:
+def _sprt_signature(config: Config) -> str:
+    """Bind checkpoint to engine, variants, opening schedule and SPRT hypotheses."""
+    payload = {
+        "variant": config.variant,
+        "engine": asdict(config.engine),
+        "search": asdict(config.search),
+        "match": {
+            "paired": config.match.paired,
+            "seed": config.match.seed,
+            "openings_file": config.match.openings_file,
+            "max_plies": config.match.max_plies,
+        },
+        "baseline": asdict(config.baseline),
+        "candidate": asdict(config.candidate),
+        "sprt": {
+            "elo0": config.sprt.elo0,
+            "elo1": config.sprt.elo1,
+            "alpha": config.sprt.alpha,
+            "beta": config.sprt.beta,
+            "batch_games": config.sprt.batch_games,
+        },
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+def _load_sprt_checkpoint(config: Config) -> tuple[WDL, int]:
+    path = Path(config.sprt.state_file)
+    if not path.exists():
+        return WDL(), 0
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("version") != 1 or payload.get("signature") != _sprt_signature(config):
+        raise ValueError(
+            f"SPRT checkpoint {path} is incompatible with this experiment; "
+            "use a different sprt.state_file or --fresh to start again"
+        )
+    wdl_data = payload["wdl"]
+    total = WDL(
+        wins=int(wdl_data["wins"]),
+        draws=int(wdl_data["draws"]),
+        losses=int(wdl_data["losses"]),
+    )
+    played = int(payload["played"])
+    if min(total.wins, total.draws, total.losses) < 0 or played != total.games:
+        raise ValueError(f"SPRT checkpoint {path} has inconsistent game totals")
+    if played < 0 or (config.match.paired and played % 2):
+        raise ValueError(f"SPRT checkpoint {path} has invalid game count")
+    return total, played
+
+
+def _save_sprt_checkpoint(config: Config, total: WDL, played: int) -> None:
+    path = Path(config.sprt.state_file)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": 1,
+        "signature": _sprt_signature(config),
+        "played": played,
+        "wdl": asdict(total),
+    }
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def command_sprt(config: Config, *, fresh: bool = False) -> int:
+    if fresh:
+        Path(config.sprt.state_file).unlink(missing_ok=True)
+    total, played = _load_sprt_checkpoint(config)
     runner = MatchRunner(config)
     state = SprtState(
         elo0=config.sprt.elo0,
@@ -104,62 +175,90 @@ def command_sprt(config: Config) -> int:
         alpha=config.sprt.alpha,
         beta=config.sprt.beta,
     )
-    total = WDL()
-    played = 0
+    state.update(total)
     output_lock = threading.Lock()
+    stop_after_batch = threading.Event()
+    previous_sigint = None
+    can_install_signal = threading.current_thread() is threading.main_thread()
 
-    print(
-        f"[SPRT] Starting | baseline={config.baseline.path or config.engine.path} "
-        f"| candidate={config.candidate.path or config.engine.path}",
-        flush=True,
-    )
-    print(
-        f"[SPRT] Up to {config.sprt.max_games} games | "
-        f"batch={config.sprt.batch_games} | "
-        f"workers={config.match.workers} | {config.search.go_command()}",
-        flush=True,
-    )
+    def request_stop(signum: int, frame: object) -> None:
+        if stop_after_batch.is_set():
+            # A second Ctrl+C is an emergency interruption; the in-progress
+            # batch is not checkpointed and will be replayed on resume.
+            raise KeyboardInterrupt
+        stop_after_batch.set()
+        print("\n[SPRT] Stop requested; finishing current batch before saving.",
+              flush=True)
 
-    while played < config.sprt.max_games and state.decision == "continue":
-        batch = min(config.sprt.batch_games, config.sprt.max_games - played)
-        if config.match.paired and batch % 2:
-            batch -= 1
-        if batch <= 0:
-            break
+    if can_install_signal:
+        previous_sigint = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, request_stop)
 
-        def completed(record: GameRecord, batch_wdl: WDL) -> None:
-            result_label = ("WIN" if record.result == 1.0
-                            else "LOSS" if record.result == 0.0 else "DRAW")
-            with output_lock:
-                print(
-                    f"[SPRT] Completed {played + batch_wdl.games}/"
-                    f"{config.sprt.max_games} | "
-                    f"game {record.game_id + 1}: {result_label} | "
-                    f"W/D/L {total.wins + batch_wdl.wins}/"
-                    f"{total.draws + batch_wdl.draws}/"
-                    f"{total.losses + batch_wdl.losses}",
-                    flush=True,
-                )
-
-        batch_wdl, _ = runner.run(
-            games=batch, offset=played,
-            on_progress=_game_progress("SPRT", output_lock, show_playing=False),
-            on_game_complete=completed,
+    try:
+        print(
+            f"[SPRT] {'Resuming' if played else 'Starting'} at {played} games | "
+            f"baseline={config.baseline.path or config.engine.path} "
+            f"| candidate={config.candidate.path or config.engine.path}",
+            flush=True,
         )
-        total.extend(batch_wdl)
-        played += batch
-        state.update(total)
-        print(format_summary(total))
-        print(state.summary())
+        print(
+            f"[SPRT] Up to {config.sprt.max_games} games | "
+            f"batch={config.sprt.batch_games} | "
+            f"workers={config.match.workers} | {config.search.go_command()}",
+            flush=True,
+        )
 
-    if state.decision == "H1":
-        print("SPRT accepted H1: candidate reached the positive Elo hypothesis.")
-        return 0
-    if state.decision == "H0":
-        print("SPRT accepted H0: candidate did not reach the positive Elo hypothesis.")
-        return 2
-    print("SPRT reached max_games without crossing a boundary.")
-    return 3
+        while played < config.sprt.max_games and state.decision == "continue":
+            if stop_after_batch.is_set():
+                break
+            batch = min(config.sprt.batch_games, config.sprt.max_games - played)
+            if config.match.paired and batch % 2:
+                batch -= 1
+            if batch <= 0:
+                break
+
+            def completed(record: GameRecord, batch_wdl: WDL) -> None:
+                result_label = ("WIN" if record.result == 1.0
+                                else "LOSS" if record.result == 0.0 else "DRAW")
+                with output_lock:
+                    print(
+                        f"[SPRT] Completed {played + batch_wdl.games}/"
+                        f"{config.sprt.max_games} | "
+                        f"game {record.game_id + 1}: {result_label} | "
+                        f"W/D/L {total.wins + batch_wdl.wins}/"
+                        f"{total.draws + batch_wdl.draws}/"
+                        f"{total.losses + batch_wdl.losses}",
+                        flush=True,
+                    )
+
+            batch_wdl, _ = runner.run(
+                games=batch, offset=played,
+                on_progress=_game_progress("SPRT", output_lock, show_playing=False),
+                on_game_complete=completed,
+            )
+            total.extend(batch_wdl)
+            played += batch
+            state.update(total)
+            _save_sprt_checkpoint(config, total, played)
+            print(format_summary(total))
+            print(state.summary())
+
+        if stop_after_batch.is_set():
+            print(f"[SPRT] Paused after {played} games; "
+                  f"checkpoint: {config.sprt.state_file}", flush=True)
+            return 0
+        if state.decision == "H1":
+            print("SPRT accepted H1: candidate reached the positive Elo hypothesis.")
+            return 0
+        if state.decision == "H0":
+            print("SPRT accepted H0: candidate did not reach the positive Elo hypothesis.")
+            return 2
+        print("SPRT reached max_games without crossing a boundary.")
+        return 3
+    finally:
+        if can_install_signal:
+            signal.signal(signal.SIGINT, previous_sigint)
+
 
 
 def command_spsa(config: Config, iterations: int | None) -> int:
@@ -244,7 +343,9 @@ def build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--report", default=None,
                         help="optional JSON comparison output path")
 
-    sub.add_parser("sprt", help="run sequential candidate-vs-baseline testing")
+    sprt = sub.add_parser("sprt", help="run resumable SPRT; Ctrl+C stops after current batch")
+    sprt.add_argument("--fresh", action="store_true",
+                      help="discard the existing SPRT checkpoint and start over")
 
     spsa = sub.add_parser("spsa", help="run SPSA parameter tuning")
     spsa.add_argument("--iterations", type=int, default=None)
@@ -279,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "replay":
             return command_replay(config, args.file, args.team, args.report)
         if args.command == "sprt":
-            return command_sprt(config)
+            return command_sprt(config, fresh=args.fresh)
         if args.command == "spsa":
             return command_spsa(config, args.iterations)
         if args.command == "bayesian":
