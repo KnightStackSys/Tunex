@@ -39,6 +39,7 @@
     "alpha": 0.05,
     "beta": 0.05,
     "max_games": 10000,
-    "batch_games": 20
+    "batch_games": 20,
+    "state_file": "results/binary_sprt_state.json"
   }
 }
